@@ -1,55 +1,67 @@
 {
-  "seed": 1880954174,
-  "platform": "win32",
-  "v": 3,
-  "db_model": "ONE accumulating DB across all cycles (no fresh DBs); commits_per_cycle counts ACKs drained per generation",
-  "kills": {
+  "pass": true,
+  "failure": null,
+  "seed": 4071131,
+  "db": "D:\\p12\\p12_nuiqkfm2\\kill.db",
+  "generations": {
+    "planned": 300,
+    "completed": 300,
     "random": 200,
-    "after_state": 25,
-    "after_event": 25,
-    "before_commit": 25,
-    "after_commit_before_ack": 25
+    "injected": {
+      "after_state": 25,
+      "after_event": 25,
+      "before_commit": 25,
+      "after_commit": 25
+    }
   },
-  "total_kills": 300,
-  "unacked_begin_random_kills": 196,
-  "commits_per_cycle": {
+  "counts": {
+    "ack_lines": 25155,
+    "committed_unacked": 139,
+    "total_events": 25294,
+    "db_count": 25294,
+    "final_heads": {
+      "c_k1": 6323,
+      "c_k2": 6324,
+      "c_k3": 6324,
+      "office": 6323
+    },
+    "after_commit_unacked": 25
+  },
+  "commits_per_generation": {
     "min": 0,
-    "max": 207,
-    "median": 65.0,
-    "note": "counts = ACK lines per generation; sum over generations + graceful final = total_committed_events"
+    "median": 94.0,
+    "max": 206
   },
-  "total_committed_events": 541366,
-  "heads": {
-    "c_k1": 135341,
-    "c_k2": 135342,
-    "c_k3": 135342,
-    "office": 135341
+  "random_kills": {
+    "idle": 2,
+    "between": 0,
+    "inflight": 198,
+    "torn_begin": 0,
+    "acked_torn": 0,
+    "inflight_pct": 99.0
   },
-  "last_acked_by_stream": {
-    "c_k1": 135341,
-    "c_k2": 135342,
-    "c_k3": 135342,
-    "office": 135341
+  "floors": {
+    "total_events>=10000": true,
+    "random_inflight_pct>=97": true,
+    "committed_unacked>=per_fault": true,
+    "committed_unacked<=generations": true,
+    "after_commit_unacked==per_fault": true,
+    "rollback_modes_verified==3*per_fault": true,
+    "total_events==ack_lines+committed_unacked==db_count==sum(heads)": true,
+    "elapsed<=25min": true
   },
-  "per_stream_gapless": {
-    "c_k1": true,
-    "c_k2": true,
-    "c_k3": true,
-    "office": true
+  "phase_seconds": {
+    "spawn_ready": 48.18,
+    "kill_wait": 75.58,
+    "verify": 45.41,
+    "full": 126.19
   },
-  "rollback_checks_all_zero": true,
-  "random_probes_fail": [],
-  "checks": {
-    "total_committed_events_ge_10000": true,
-    "per_stream_gapless": true,
-    "ack_rule_per_stream": true,
-    "message_links_orphans_zero": true,
-    "tool_links_orphans_zero": true,
-    "rollback_modes_inflight_absent": true,
-    "unacked_begin_random_kills_ge_25pct": true,
-    "random_committed_unacked_both_present": true,
-    "integrity_check": true,
-    "foreign_key_check_empty": true
-  },
-  "pass": true
+  "resources": {
+    "elapsed_s": 302.0,
+    "wal_bytes_max": 4181832,
+    "wal_truncations": 0,
+    "wal_cap_mb": 32.0,
+    "db_bytes_final": 148381696,
+    "disk_free_min_bytes": 332953305088
+  }
 }

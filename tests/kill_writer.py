@@ -1,13 +1,21 @@
-"""P1.2 kill-harness writer v3 (boss ruling): uses the PRODUCTION EventStore.append
-path — state_writer callback, rollback branch, _heads cache, lock order — with the
-deterministic failpoint hook inside append for the injected kill modes.
+"""P1.2 kill-harness writer v4 (hang/accuracy fix). Same PRODUCTION EventStore.append path as v3.
 
-- READY marker after constructing EventStore (unbuffered os.write — D1 condition).
-- BEGIN marker before each append; ACK after append returns (commit done).
-- 2 KB payloads, interleaved across 3 chats + office.
-- Fault mode + seeded k fire the failpoint at the named point inside append.
-- os._exit(9) = portable SIGKILL (D2, approved); random kills external Popen.kill().
+What changed vs v3
+- stdout carries exactly ONE line (READY). v3 also wrote BEGIN/ACK lines to stdout: once the parent
+  stops reading after READY, the pipe fills and the writer blocks mid-run, which skews commits per
+  cycle and the in-flight statistics.
+- BEGIN/ACK markers go to the marks file through unbuffered O_APPEND os.write, so a kill
+  (os._exit or Popen.kill) can neither lose nor tear a marker line.
+      "B <stream> <txno>\n"   written before store.append
+      "A <stream> <seq>\n"    written after store.append returned (commit done)
+- If EventStore() construction stalls (lock, WAL recovery) the child dumps its own stack to stderr
+  after 25 s, so a "never READY" generation explains itself.
+- Fault mode + seeded k fire the failpoint inside append (after_state / after_event /
+  before_commit / after_commit); os._exit(9) = portable self-kill (D2, approved).
+
+argv: db_path marks_path [fault [fault_k]]
 """
+import faulthandler
 import os
 import sys
 
@@ -16,27 +24,31 @@ from sitecrew.store import db as sdb   # noqa: E402
 from sitecrew.store.events import EventStore  # noqa: E402
 
 STREAMS = ["c_k1", "c_k2", "c_k3", "office"]
+_FD = -1
 
 
-def emit(text):
-    os.write(1, (text + "\n").encode("ascii"))
+def mark(line):
+    os.write(_FD, line.encode("ascii"))
+
+
+def die():
+    os._exit(9)
 
 
 def main():
-    db_path, acks_path = sys.argv[1], sys.argv[2]
+    global _FD
+    db_path, marks_path = sys.argv[1], sys.argv[2]
     fault = sys.argv[3] if len(sys.argv) > 3 else ""
     fault_k = int(sys.argv[4]) if len(sys.argv) > 4 else 0
     stop_after = int(os.environ.get("SITECREU_STOP_AFTER",
                      os.environ.get("SITECREW_WRITER_STOP_AFTER", "0")) or 0)
 
-    def die(stream):
-        emit("DIE %s" % stream)               # parent: assert rollback vs commit
-        ackf.flush()
-        os._exit(9)
-
+    faulthandler.dump_traceback_later(25, exit=False)      # stderr; cancelled once READY
     store = EventStore(db_path)
-    ackf = open(acks_path, "a", encoding="ascii")
-    emit("READY")
+    _FD = os.open(marks_path,
+                  os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0))
+    faulthandler.cancel_dump_traceback_later()
+    os.write(1, b"READY\n")
 
     counters = {s: 0 for s in STREAMS}
     txno = store.conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
@@ -48,7 +60,7 @@ def main():
         hit = bool(fault) and (txno - initial_txno) == fault_k
         payload = ("P" * 2048) + str(txno)
 
-        emit("BEGIN %s" % stream)
+        mark("B %s %d\n" % (stream, txno))
 
         cycle = counters[stream]
         if stream != "office" and cycle % 2 == 0:
@@ -68,26 +80,27 @@ def main():
                 return _mid                       # events.id == messages.id
         else:
             _tu = "tu_%s_%d" % (stream, txno)
+            _tx = txno
             etype = "tool.committed"
             data = {"tool_use_id": _tu, "name": "fs.read", "verified": True,
                     "n": txno, "p": payload}
 
-            def state_writer(conn, seq, _s=stream, _p=payload):
-                _t = "t_%s_%d" % (_s, txno)
-                _tc = "tc_%s_%d" % (_s, txno)
+            def state_writer(conn, seq, _s=stream, _n=_tx, _tuid=_tu):
+                _t = "t_%s_%d" % (_s, _n)
+                _tc = "tc_%s_%d" % (_s, _n)
                 conn.execute(
                     "INSERT INTO turns(id, chat_id, state, started_at) VALUES(?,?,?,?)",
                     (_t, _s, "running", sdb.utc_ms()))
                 conn.execute(
                     "INSERT INTO tool_calls(id, turn_id, tool_use_id, name, status,"
                     " committed_seq) VALUES(?,?,?,?,?,?)",
-                    (_tc, _t, _tu, "fs.read", "committed", seq))
+                    (_tc, _t, _tuid, "fs.read", "committed", seq))
 
         failpoint = None
         if hit:
-            def failpoint(point, _fault=fault, _stream=stream):
+            def failpoint(point, _fault=fault):
                 if point == _fault:
-                    die(_stream)
+                    die()
 
         env = store.append(stream, etype, data, state_writer=state_writer,
                            failpoint=failpoint,
@@ -95,12 +108,10 @@ def main():
                            strict=True)
 
         counters[stream] += 1
-        ackf.write("%s:%d\n" % (stream, env["seq"]))
-        ackf.flush()
-        emit("ACK %s %d" % (stream, env["seq"]))
+        mark("A %s %d\n" % (stream, env["seq"]))
         done += 1
         if stop_after and done >= stop_after:
-            ackf.close()
+            os.close(_FD)
             store.close()
             return 0
 
