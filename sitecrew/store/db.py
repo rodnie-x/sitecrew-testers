@@ -17,6 +17,22 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 
+MIN_SQLITE = (3, 35, 0)          # boss precondition: assert at startup
+
+
+def sqlite_version_tuple():
+    return tuple(int(x) for x in sqlite3.sqlite_version.split("."))
+
+
+def assert_sqlite_min_version():
+    """Fail fast if the LINKED SQLite is older than the store requires (boss ruling:
+    lint against the SQLite Python actually links — the bundled one on Android)."""
+    if sqlite_version_tuple() < MIN_SQLITE:
+        raise RuntimeError(
+            "SQLite >= %s required; linked sqlite3 reports %s"
+            % (".".join(map(str, MIN_SQLITE)), sqlite3.sqlite_version))
+
+
 # ---------------------------------------------------------------- ids and json
 
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -162,9 +178,10 @@ MIGRATIONS = {1: MIGRATION_001, 2: MIGRATION_002}
 _conn_lock = threading.Lock()
 
 
-def connect(path, timeout=5.0):
+def connect(path, timeout=5.0, read_only=False):
     """The ONE connection factory (boss ruling): identical pragmas on every connection.
 
+    read_only=True adds PRAGMA query_only=ON (boss precondition for read connections).
     check_same_thread=False: Flask threads and parked poll threads share connections;
     correctness comes from the writer lock (writes) and short reads, not thread affinity.
     """
@@ -173,29 +190,108 @@ def connect(path, timeout=5.0):
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=5000")
+    if read_only:
+        conn.execute("PRAGMA query_only=ON")
     return conn
 
 
-def migrate(path):
-    """Apply pending migrations in order; returns the connection and the new version."""
+def migrate(path, failpoint=None):
+    """Apply pending migrations atomically (boss rerun spec item 2).
+
+    Each migration runs inside ONE BEGIN IMMEDIATE ... COMMIT with the PRAGMA
+    user_version bump inside the same transaction; user_version is re-read inside
+    the transaction. A kill at any point rolls back the whole migration, so the DB
+    is always fully at the old version or fully at the new one.
+    failpoint: optional callable(stage) invoked between statements for the
+    deterministic migration kill test ("after_script", "before_version").
+    """
     conn = connect(path)
     with _conn_lock:
         conn.execute("PRAGMA journal_mode=WAL")
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         for target in sorted(MIGRATIONS):
             if version < target:
-                conn.executescript(MIGRATIONS[target])
-                conn.execute(f"PRAGMA user_version={target}")
-                conn.commit()
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    # executescript() would COMMIT implicitly — split the script and
+                    # run the statements inside our own transaction
+                    for statement in MIGRATIONS[target].split(";"):
+                        stmt = statement.strip()
+                        if stmt:
+                            conn.execute(stmt)
+                    if failpoint is not None:
+                        failpoint("after_script")
+                    conn.execute(f"PRAGMA user_version={target}")
+                    current = conn.execute("PRAGMA user_version").fetchone()[0]
+                    if current != target:
+                        raise RuntimeError("user_version did not stick")
+                    conn.execute("COMMIT")
+                except BaseException:
+                    conn.execute("ROLLBACK")
+                    raise
                 version = target
     return conn, version
 
 
 def open_db(path):
     """connect + migrate in one call (the store's only entry point for a path)."""
+    assert_sqlite_min_version()
     os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
     conn, version = migrate(path)
     return conn, version
+
+
+# ------------------------------------------------- cross-process writer lock
+class ProcLock:
+    """OS-level advisory lock on <path>.lock — flock (POSIX) or msvcrt (Windows).
+
+    Boss ruling: use flock for the writer lock, NOT a lockfile's existence, so a
+    SIGKILL cannot leave a stale lock (the OS releases the lock on process death).
+    A second writer attempting to acquire gets DB_LOCKED.
+    """
+
+    def __init__(self, path):
+        self.lock_path = path + ".lock"
+        self._fd = None
+        self._locked = False
+
+    def acquire(self, blocking=True):
+        self._fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+        try:
+            import fcntl                       # POSIX
+            flags = fcntl.LOCK_EX if blocking else fcntl.LOCK_EX | fcntl.LOCK_NB
+            fcntl.flock(self._fd, flags)
+            self._locked = True
+            return True
+        except ImportError:
+            import msvcrt                      # Windows
+            os.lseek(self._fd, 0, os.SEEK_SET)
+            mode = msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK
+            try:
+                msvcrt.locking(self._fd, mode, 1)
+                self._locked = True
+                return True
+            except OSError:
+                os.close(self._fd)
+                self._fd = None
+                raise
+
+    def release(self):
+        if not self._locked:
+            return
+        try:
+            import fcntl
+            fcntl.flock(self._fd, fcntl.LOCK_UN)
+        except ImportError:
+            import msvcrt
+            os.lseek(self._fd, 0, os.SEEK_SET)
+            msvcrt.locking(self._fd, msvcrt.LK_UNLCK, 1)
+        os.close(self._fd)
+        self._fd = None
+        self._locked = False
+
+
+DB_LOCKED = "DB_LOCKED"
 
 # ---------------------------------------------------------------- EVENT_TYPES
 

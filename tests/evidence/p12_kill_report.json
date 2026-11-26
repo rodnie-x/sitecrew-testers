@@ -1,7 +1,8 @@
 {
-  "seed": 1628412648,
+  "seed": 2083618289,
   "platform": "win32",
-  "v": 2,
+  "v": 3,
+  "db_model": "ONE accumulating DB across all cycles (no fresh DBs); commits_per_cycle counts ACKs drained per generation",
   "kills": {
     "random": 200,
     "after_state": 25,
@@ -10,24 +11,25 @@
     "after_commit_before_ack": 25
   },
   "total_kills": 300,
-  "unacked_begin_random_kills": 194,
+  "unacked_begin_random_kills": 195,
   "commits_per_cycle": {
     "min": 0,
-    "max": 20534,
-    "median": 7986.5
+    "max": 514,
+    "median": 174.5,
+    "note": "counts = ACK lines per generation; sum over generations + graceful final = total_committed_events"
   },
-  "total_committed_events": 29572,
+  "total_committed_events": 45445,
   "heads": {
-    "c_k1": 7393,
-    "c_k2": 7393,
-    "c_k3": 7393,
-    "office": 7393
+    "c_k1": 11361,
+    "c_k2": 11362,
+    "c_k3": 11361,
+    "office": 11361
   },
   "last_acked_by_stream": {
-    "c_k1": 7393,
-    "c_k2": 7393,
-    "c_k3": 7393,
-    "office": 7393
+    "c_k1": 11361,
+    "c_k2": 11362,
+    "c_k3": 11361,
+    "office": 11361
   },
   "per_stream_gapless": {
     "c_k1": true,
@@ -36,6 +38,7 @@
     "office": true
   },
   "rollback_checks_all_zero": true,
+  "random_probes_fail": [],
   "checks": {
     "total_committed_events_ge_10000": true,
     "per_stream_gapless": true,
@@ -44,6 +47,7 @@
     "tool_links_orphans_zero": true,
     "rollback_modes_inflight_absent": true,
     "unacked_begin_random_kills_ge_25pct": true,
+    "random_committed_unacked_both_present": true,
     "integrity_check": true,
     "foreign_key_check_empty": true
   },

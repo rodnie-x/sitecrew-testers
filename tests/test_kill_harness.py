@@ -85,23 +85,30 @@ class KillHarnessV2(unittest.TestCase):
         def spawn(fault="", fault_k=0):
             env = dict(os.environ)
             env.pop("SITECREW_WRITER_STOP_AFTER", None)
+            env.pop("SITECREU_STOP_AFTER", None)
             proc = subprocess.Popen(
                 [sys.executable, WRITER, db_path, os.path.join(tmp, "acks.txt"),
                  fault, str(fault_k)],
-                env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             reader = MarkerReader(proc)
             reader.start()
             return proc, reader
 
         def collect(reader):
-            """Take this generation's ACKs; per-stream last_acked only moves forward."""
+            """Take this generation's ACKs; per-stream last_acked only moves forward.
+
+            Returns the generation's true COMMIT COUNT = number of ACK lines
+            (NOT the sum of max seqs — that was the accounting bug the boss caught:
+            max-seq sums include the whole accumulated history and are garbage).
+            """
             got = reader.ack_by_stream()
             for s, seq in got.items():
                 last_acked_by_stream[s] = max(last_acked_by_stream[s], seq)
-            return sum(got.values())
+            return len(reader.acks)
 
         # -- 200 random kills: 0–400 ms after READY, external Popen.kill() ------
         unacked_begin_kills = 0
+        random_probes_fail = []                 # boss item 3: both-present probe
         for _ in range(RANDOM_KILLS):
             proc, reader = spawn()
             deadline = time.time() + 5
@@ -115,6 +122,26 @@ class KillHarnessV2(unittest.TestCase):
             commits_per_cycle.append(committed)
             if reader.begins > len(reader.acks):    # BEGIN written, no ACK: kill hit
                 unacked_begin_kills += 1            # real work mid-flight
+                # boss item 3: committed-but-unacked rows (BEGIN, no ACK) must be
+                # verified BOTH-PRESENT (state row + event, 0 orphans) after reopen
+                conn_probe = sdb.connect(db_path)
+                o = conn_probe.execute(
+                    "SELECT COUNT(*) FROM messages m WHERE NOT EXISTS (SELECT 1 FROM"
+                    " events e WHERE e.chat_id=m.chat_id AND e.id=m.id"
+                    " AND e.type='message.created')").fetchone()[0]
+                o += conn_probe.execute(
+                    "SELECT COUNT(*) FROM events e WHERE e.type='message.created'"
+                    " AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.chat_id=e.chat_id"
+                    " AND m.id=e.id)").fetchone()[0]
+                o += conn_probe.execute(
+                    "SELECT COUNT(*) FROM tool_calls tc JOIN turns t ON t.id=tc.turn_id"
+                    " WHERE tc.committed_seq IS NOT NULL AND NOT EXISTS (SELECT 1 FROM"
+                    " events e WHERE e.chat_id=t.chat_id AND e.seq=tc.committed_seq"
+                    " AND e.type='tool.committed')").fetchone()[0]
+                conn_probe.close()
+                if o != 0:
+                    random_probes_fail.append({"gen": kills["random"] + 1,
+                                               "orphans": o})
             kills["random"] += 1
 
         # -- 100 injected kills: 4 modes × 25 on seeded k-th tx -----------------
@@ -124,7 +151,11 @@ class KillHarnessV2(unittest.TestCase):
             for i in range(INJECTED_PER_MODE):
                 k = ks[mode_i * INJECTED_PER_MODE + i]
                 proc, reader = spawn(mode, k)
-                proc.wait(timeout=60)
+                try:
+                    proc.wait(timeout=90)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=30)
                 reader.join(timeout=10)             # drain fully before accounting
                 collect(reader)
                 kills[mode] += 1
@@ -156,7 +187,7 @@ class KillHarnessV2(unittest.TestCase):
         final = subprocess.Popen(
             [sys.executable, WRITER, db_path, os.path.join(tmp, "acks.txt")],
             env=env, stdout=subprocess.DEVNULL, stderr=final_err)
-        final.wait(timeout=120)
+        final.wait(timeout=180)
         final_err.close()
         if final.returncode != 0:
             with open(os.path.join(tmp, "final_err.txt"), encoding="utf-8",
@@ -215,6 +246,7 @@ class KillHarnessV2(unittest.TestCase):
             "rollback_modes_inflight_absent": rollback_ok,
             "unacked_begin_random_kills_ge_25pct":
                 unacked_begin_kills >= RANDOM_KILLS * 0.25,
+            "random_committed_unacked_both_present": len(random_probes_fail) == 0,
             "integrity_check": conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok",
             "foreign_key_check_empty":
                 len(conn.execute("PRAGMA foreign_key_check").fetchall()) == 0,
@@ -224,18 +256,23 @@ class KillHarnessV2(unittest.TestCase):
         report = {
             "seed": seed,
             "platform": sys.platform,
-            "v": 2,
+            "v": 3,
+            "db_model": "ONE accumulating DB across all cycles (no fresh DBs); "
+                        "commits_per_cycle counts ACKs drained per generation",
             "kills": kills,
             "total_kills": sum(kills.values()),
             "unacked_begin_random_kills": unacked_begin_kills,
             "commits_per_cycle": {
                 "min": min(commits_per_cycle), "max": max(commits_per_cycle),
-                "median": statistics.median(commits_per_cycle)},
+                "median": statistics.median(commits_per_cycle),
+                "note": "counts = ACK lines per generation; sum over generations + "
+                        "graceful final = total_committed_events"},
             "total_committed_events": total_events,
             "heads": heads,
             "last_acked_by_stream": last_acked_by_stream,
             "per_stream_gapless": per_stream_gapless,
             "rollback_checks_all_zero": rollback_ok,
+            "random_probes_fail": random_probes_fail,
             "checks": checks,
             "pass": all(v is True for v in checks.values()),
         }

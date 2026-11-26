@@ -4,8 +4,8 @@ Boss rulings implemented (docs/BOSS_PHASE1_ORDER.md):
 - seq is allocated inside the same BEGIN IMMEDIATE transaction as the state change it
   describes — "event exists ⇔ state committed" by construction;
 - ONE process-wide writer lock per store; BEGIN IMMEDIATE under it;
-- threading.Condition notify on append + a 2 s safety re-check (a missed notify costs
-  at most 2 s);
+- threading.Condition notify on append; check-then-wait under the SAME lock with a
+  1 s belt (a missed notify costs at most 1 s — boss D3 ruling, merged into D10);
 - poll contract: GET /api/v2/poll?streams=c_x:318,office:12&wait=25 →
   {"events":[envelopes], "heads":{...}, "more":bool, "reset":[streams]}; grouped by
   stream in request order, ascending seq, ≤ 200 per response; cursor above head →
@@ -83,7 +83,7 @@ class EventStore:
     # ------------------------------------------------------------ append
     def append(self, stream, type_name, data, turn_id=None, case_id=None,
                task_id=None, run_id=None, agent=None, site=None, state_writer=None,
-               strict=False, ts=None):
+               strict=False, ts=None, failpoint=None):
         """Write state + event in ONE transaction; returns the envelope.
 
         state_writer(conn, seq) runs inside the same transaction and writes the state
@@ -91,6 +91,11 @@ class EventStore:
         event id (P1.2 oracle: messages.id k-i and events.id k-i are the same). With
         strict=True an unknown type raises (SITECREW_STRICT=1 in tests); production
         logs and writes.
+
+        failpoint: deterministic kill hook for the P1.2 harness (boss rerun spec) —
+        a callable(point) invoked at "after_state", "after_event", "before_commit"
+        and "after_commit"; the harness SIGKILLs the process at the named point.
+        Production passes None.
         """
         if not db.event_type_known(type_name):
             if strict:
@@ -99,12 +104,15 @@ class EventStore:
         with self._writer:
             with self._cond:
                 self.conn.execute("BEGIN IMMEDIATE")
+                committed = False
                 try:
                     seq = self._next_seq(self.conn, stream)
                     if state_writer is not None:
                         override = state_writer(self.conn, seq)
                         if isinstance(override, str) and override:
                             eid = override
+                    if failpoint is not None:
+                        failpoint("after_state")
                     if eid is None:
                         eid = db.new_id("e")
                     self.conn.execute(
@@ -114,9 +122,17 @@ class EventStore:
                         (stream, seq, eid, turn_id, type_name, db.dumps(data),
                          ts if ts is not None else db.utc_ms(),
                          case_id, task_id, run_id, agent, site))
+                    if failpoint is not None:
+                        failpoint("after_event")
+                    if failpoint is not None:
+                        failpoint("before_commit")
                     self.conn.execute("COMMIT")
+                    committed = True
+                    if failpoint is not None:
+                        failpoint("after_commit")
                 except BaseException:
-                    self.conn.execute("ROLLBACK")
+                    if not committed:
+                        self.conn.execute("ROLLBACK")
                     raise
                 self._heads[stream] = seq
                 self._cond.notify_all()
