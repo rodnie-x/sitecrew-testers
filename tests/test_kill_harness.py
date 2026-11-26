@@ -110,6 +110,7 @@ class KillHarnessV2(unittest.TestCase):
         unacked_begin_kills = 0
         random_probes_fail = []                 # boss item 3: both-present probe
         for _ in range(RANDOM_KILLS):
+            t_cycle = time.time()
             proc, reader = spawn()
             deadline = time.time() + 5
             while not reader.ready and time.time() < deadline and proc.poll() is None:
@@ -122,9 +123,10 @@ class KillHarnessV2(unittest.TestCase):
             commits_per_cycle.append(committed)
             if reader.begins > len(reader.acks):    # BEGIN written, no ACK: kill hit
                 unacked_begin_kills += 1            # real work mid-flight
-            if (_ + 1) % 50 == 0:
-                print("random kills: %d/200 (unacked so far: %d)"
-                      % (_ + 1, unacked_begin_kills), flush=True)
+            if (_ + 1) % 25 == 0 or (time.time() - t_cycle) > 15:
+                print("random kill %d/200 took %.1fs (unacked: %d)"
+                      % (_ + 1, time.time() - t_cycle, unacked_begin_kills),
+                      flush=True)
                 # boss item 3: committed-but-unacked rows (BEGIN, no ACK) must be
                 # verified BOTH-PRESENT (state row + event, 0 orphans) after reopen
                 conn_probe = sdb.connect(db_path)
