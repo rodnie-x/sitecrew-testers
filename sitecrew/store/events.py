@@ -5,7 +5,7 @@ Boss rulings implemented (docs/BOSS_PHASE1_ORDER.md):
   describes — "event exists ⇔ state committed" by construction;
 - ONE process-wide writer lock per store; BEGIN IMMEDIATE under it;
 - threading.Condition notify on append; check-then-wait under the SAME lock with a
-  1 s belt (a missed notify costs at most 1 s — boss D3 ruling, merged into D10);
+  1 s belt (a missed notify costs at most 1 s — boss D3 ruling);
 - poll contract: GET /api/v2/poll?streams=c_x:318,office:12&wait=25 →
   {"events":[envelopes], "heads":{...}, "more":bool, "reset":[streams]}; grouped by
   stream in request order, ascending seq, ≤ 200 per response; cursor above head →
@@ -73,6 +73,12 @@ class EventStore:
         self._writer = threading.Lock()          # process-wide writer lock
         self._cond = threading.Condition()       # notified on every append
         self._heads = {}
+        self._proclock = db.ProcLock(path)
+        try:
+            self._proclock.acquire()
+        except OSError:
+            self._proclock.release()
+            raise RuntimeError(db.DB_LOCKED)
         self._race_hook = None                   # test-only: injected between
         for row in self.conn.execute(           #   check and wait (deterministic race)
                 "SELECT chat_id, MAX(seq) AS h FROM events GROUP BY chat_id"):
@@ -134,7 +140,7 @@ class EventStore:
                     if failpoint is not None:
                         failpoint("after_commit")
                 except BaseException:
-                    if not committed:
+                    if not committed and self.conn.in_transaction:
                         self.conn.execute("ROLLBACK")
                     raise
                 self._heads[stream] = seq
@@ -156,27 +162,30 @@ class EventStore:
             (stream, cursor, limit)).fetchall()
         return [to_envelope(r) for r in rows]
 
-    def poll(self, streams, wait_s=25.0, max_events=200):
-        """Boss poll contract. streams = {name: cursor}. Returns the response dict.
+    def poll(self, cursors, wait=25.0, max_events=200, wait_s=None):
+        """Boss poll contract. cursors = {name: cursor}. Returns the response dict.
 
         Wakeup discipline (boss ruling, D3 fix): the head check and the wait happen
         under the SAME condition lock, with a 1 s belt — a missed notify costs at
         most 1 s, which meets the 300 ms P1.3 latency budget for the notify path.
+        (wait= is the api_v2 signature; wait_s kept as an alias.)
         """
-        streams = {k: int(v) for k, v in streams.items()}
-        deadline_wait = max(0.0, min(float(wait_s or 0), 25.0))
+        if wait_s is not None:
+            wait = wait_s
+        cursors = {k: int(v) for k, v in cursors.items()}
+        deadline_wait = max(0.0, min(float(wait or 0), 25.0))
 
         def fetch():
             events, heads, more = [], {}, False
             remaining = max_events
-            for name in streams:                       # request order preserved
+            for name in cursors:                       # request order preserved
                 head = self.head(name)
                 heads[name] = head
                 if remaining <= 0:
-                    if self.events_after(name, streams[name], 1):
+                    if self.events_after(name, cursors[name], 1):
                         more = True
                     continue
-                got = self.events_after(name, streams[name], remaining + 1)
+                got = self.events_after(name, cursors[name], remaining + 1)
                 if len(got) > remaining:
                     got = got[:remaining]
                     more = True
@@ -195,7 +204,7 @@ class EventStore:
                     self._cond.wait(step)
                     waited += step
                     events, heads, more = fetch()
-        return self._respond(streams, events, heads, more)
+        return self._respond(cursors, events, heads, more)
 
     def _respond(self, streams, events, heads, more):
         reset = [name for name, cur in streams.items() if cur > heads.get(name, 0)]
@@ -283,6 +292,10 @@ class EventStore:
     def close(self):
         try:
             self._read.close()
+        except Exception:
+            pass
+        try:
+            self._proclock.release()
         except Exception:
             pass
         try:

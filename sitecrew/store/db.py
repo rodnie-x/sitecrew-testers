@@ -99,6 +99,7 @@ CREATE TABLE tool_calls(id TEXT PRIMARY KEY, turn_id TEXT, tool_use_id TEXT, nam
   started_at INT, ended_at INT, committed_seq INT,
   case_id TEXT, task_id TEXT, run_id TEXT, agent TEXT, site TEXT,
   paths_json TEXT, tier TEXT, grant_id TEXT);
+CREATE INDEX idx_tool_calls_committed ON tool_calls(committed_seq);
 CREATE TABLE approvals(id TEXT PRIMARY KEY, tool_call_id TEXT, args_hash TEXT,
   status TEXT,
   expires_at INT, decided_at INT);
@@ -196,41 +197,62 @@ def connect(path, timeout=5.0, read_only=False):
 
 
 def migrate(path, failpoint=None):
-    """Apply pending migrations atomically (boss rerun spec item 2).
+    """Apply pending migrations atomically (boss rerun spec item 2 + ruling items 5/6).
 
     Each migration runs inside ONE BEGIN IMMEDIATE ... COMMIT with the PRAGMA
-    user_version bump inside the same transaction; user_version is re-read inside
-    the transaction. A kill at any point rolls back the whole migration, so the DB
-    is always fully at the old version or fully at the new one.
-    failpoint: optional callable(stage) invoked between statements for the
-    deterministic migration kill test ("after_script", "before_version").
+    user_version bump AND the user_version read inside the same transaction. A kill
+    at any point rolls back the whole migration: the DB is always fully at the old
+    version or fully at the new one.
+    failpoint: optional callable(stage) invoked after EVERY statement and before
+    user_version — stages: "stmt:<n>", "before_version" (deterministic kill test).
+    Statements come from an explicit list (no split(';') parsing).
     """
     conn = connect(path)
     with _conn_lock:
         conn.execute("PRAGMA journal_mode=WAL")
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
         for target in sorted(MIGRATIONS):
-            if version < target:
-                conn.execute("BEGIN IMMEDIATE")
-                try:
-                    # executescript() would COMMIT implicitly — split the script and
-                    # run the statements inside our own transaction
-                    for statement in MIGRATIONS[target].split(";"):
-                        stmt = statement.strip()
-                        if stmt:
-                            conn.execute(stmt)
+            current = conn.execute("PRAGMA user_version").fetchone()[0]
+            if current >= target:
+                continue
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                statements = [s.strip() for s in _statements(MIGRATIONS[target])]
+                for n, stmt in enumerate(statements):
+                    conn.execute(stmt)
                     if failpoint is not None:
-                        failpoint("after_script")
-                    conn.execute(f"PRAGMA user_version={target}")
-                    current = conn.execute("PRAGMA user_version").fetchone()[0]
-                    if current != target:
-                        raise RuntimeError("user_version did not stick")
-                    conn.execute("COMMIT")
-                except BaseException:
+                        failpoint("stmt:%d" % n)
+                if failpoint is not None:
+                    failpoint("before_version")
+                conn.execute(f"PRAGMA user_version={target}")
+                inside = conn.execute("PRAGMA user_version").fetchone()[0]
+                if inside != target:
+                    raise RuntimeError("user_version did not stick")
+                conn.execute("COMMIT")
+            except BaseException:
+                if conn.in_transaction:
                     conn.execute("ROLLBACK")
-                    raise
-                version = target
-    return conn, version
+                raise
+            current = target
+    return conn, target
+
+
+def _statements(script):
+    """Split a migration script into statements without regex guessing
+    (boss ruling: replace split(';') with an explicit list or complete_statement)."""
+    out = []
+    buf = []
+    for line in script.splitlines():
+        buf.append(line)
+        joined = "\n".join(buf)
+        if sqlite3.complete_statement(joined):
+            stmt = joined.strip()
+            if stmt and not stmt.startswith("--"):
+                out.append(stmt)
+            buf = []
+    tail = "\n".join(buf).strip()
+    if tail:
+        out.append(tail)
+    return out
 
 
 def open_db(path):

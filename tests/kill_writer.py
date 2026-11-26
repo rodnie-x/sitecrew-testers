@@ -29,7 +29,8 @@ def main():
     stop_after = int(os.environ.get("SITECREU_STOP_AFTER",
                      os.environ.get("SITECREW_WRITER_STOP_AFTER", "0")) or 0)
 
-    def die():
+    def die(stream):
+        emit("DIE %s" % stream)               # parent: assert rollback vs commit
         ackf.flush()
         os._exit(9)
 
@@ -84,9 +85,9 @@ def main():
 
         failpoint = None
         if hit:
-            def failpoint(point, _fault=fault):
+            def failpoint(point, _fault=fault, _stream=stream):
                 if point == _fault:
-                    die()
+                    die(_stream)
 
         env = store.append(stream, etype, data, state_writer=state_writer,
                            failpoint=failpoint,

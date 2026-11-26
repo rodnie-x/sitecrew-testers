@@ -40,7 +40,7 @@ STREAMS = ["c_k1", "c_k2", "c_k3", "office"]
 
 
 class MarkerReader(threading.Thread):
-    """Reads a generation's stdout pipe: READY/BEGIN/ACK markers, unbuffered."""
+    """Reads a generation's stdout pipe: READY/BEGIN/ACK/DIE markers, unbuffered."""
 
     def __init__(self, proc):
         super().__init__(daemon=True)
@@ -48,6 +48,7 @@ class MarkerReader(threading.Thread):
         self.ready = False
         self.begins = 0
         self.acks = []                      # [(stream, seq)]
+        self.die_streams = []               # streams killed at a failpoint
         self._live = True
 
     def run(self):
@@ -60,6 +61,8 @@ class MarkerReader(threading.Thread):
             elif line.startswith("ACK"):
                 _, stream, seq = line.split()
                 self.acks.append((stream, int(seq)))
+            elif line.startswith("DIE"):
+                self.die_streams.append(line.split()[1])
         self._live = False
 
     def ack_by_stream(self):
@@ -71,6 +74,10 @@ class MarkerReader(threading.Thread):
 
 class KillHarnessV2(unittest.TestCase):
     def test_p12_kill_harness_v2(self):
+        # boss item 8: free-space preflight — fail fast instead of disk-full thrash
+        import shutil as _sh
+        free = _sh.disk_usage("D:/" if os.path.exists("D:/") else "C:/").free
+        self.assertGreater(free, 2 * 1024 ** 3, "less than 2 GB free - aborting")
         big_drive = "D:/" if os.path.exists("D:/") else None
         tmp = tempfile.mkdtemp(prefix="sc_kill2_", dir=big_drive)
         db_path = os.path.join(tmp, "sitecrew.db")
@@ -165,6 +172,23 @@ class KillHarnessV2(unittest.TestCase):
                 reader.join(timeout=10)             # drain fully before accounting
                 collect(reader)
                 kills[mode] += 1
+                # boss item 2: rollback-vs-commit — after the 3 rollback modes the
+                # faulted stream's head must EQUAL its last_acked (nothing committed)
+                if mode in ("after_state", "after_event", "before_commit"):
+                    faulted = reader.die_streams[-1] if reader.die_streams else None
+                    if faulted:
+                        conn = sdb.connect(db_path)
+                        head = (conn.execute(
+                            "SELECT COALESCE(MAX(seq),0) FROM events WHERE chat_id=?",
+                            (faulted,)).fetchone()[0])
+                        conn.close()
+                        acked = max((s for s, v in last_acked_by_stream.items()
+                                     if s == faulted), default=0)
+                        if head != acked:
+                            rollback_checks.append(
+                                {"mode": mode, "k": k, "stream": faulted,
+                                 "head": head, "acked": acked})
+                        rollback_ok = rollback_ok and head == acked
                 if (i + 1) % 10 == 0:
                     print("injected %s: %d/25 done" % (mode, i + 1), flush=True)
                 if mode in ("after_state", "after_event", "before_commit"):
@@ -215,13 +239,18 @@ class KillHarnessV2(unittest.TestCase):
             per_stream_gapless[s] = rows == list(range(1, heads.get(s, 0) + 1))
         # the authoritative ACK ledger: acks.txt, written+flushed after every commit
         # by EVERY generation (the final one's stdout ACKs go to /dev/null on purpose)
+        ack_lines = 0
         for line in open(os.path.join(tmp, "acks.txt"), encoding="ascii"):
             line = line.strip()
             if ":" in line:
                 s, _, seq = line.rpartition(":")
                 if seq.isdigit():
+                    ack_lines += 1
                     last_acked_by_stream[s] = max(last_acked_by_stream.get(s, 0),
                                                   int(seq))
+        # boss item 3: total = ack_lines + committed_unacked; 25 after_commit kills
+        # guarantee committed_unacked >= 25; every kill can add at most 1 per stream
+        committed_unacked = total_events - ack_lines
         ack_rule = all(
             last_acked_by_stream.get(s, 0) <= heads.get(s, 0)
             <= last_acked_by_stream.get(s, 0) + 1 for s in STREAMS)
@@ -249,9 +278,11 @@ class KillHarnessV2(unittest.TestCase):
             "total_committed_events_ge_10000": total_events >= 10000,
             "per_stream_gapless": all(per_stream_gapless.values()),
             "ack_rule_per_stream": ack_rule,
+            "committed_unacked_bounds":
+                25 <= committed_unacked <= RANDOM_KILLS + 25,
             "message_links_orphans_zero": orphans_msg == 0,
             "tool_links_orphans_zero": orphans_tool == 0,
-            "rollback_modes_inflight_absent": rollback_ok,
+            "rollback_modes_head_equals_acked": rollback_ok,
             "unacked_begin_random_kills_ge_25pct":
                 unacked_begin_kills >= RANDOM_KILLS * 0.25,
             "random_committed_unacked_both_present": len(random_probes_fail) == 0,
@@ -264,26 +295,36 @@ class KillHarnessV2(unittest.TestCase):
         report = {
             "seed": seed,
             "platform": sys.platform,
-            "v": 3,
+            "v": 4,
             "db_model": "ONE accumulating DB across all cycles (no fresh DBs); "
-                        "commits_per_cycle counts ACKs drained per generation",
+                        "commits_per_cycle counts ACK lines per RANDOM cycle only "
+                        "(the boss's correction — injected + final generations are "
+                        "accounted via committed_unacked)",
             "kills": kills,
             "total_kills": sum(kills.values()),
             "unacked_begin_random_kills": unacked_begin_kills,
+            "ack_lines_total": ack_lines,
+            "committed_unacked": committed_unacked,
+            "committed_unacked_bounds": "25 <= cu <= 225 (25 after_commit kills "
+                                        "+ up to 200 random post-commit-pre-ACK)",
             "commits_per_cycle": {
                 "min": min(commits_per_cycle), "max": max(commits_per_cycle),
                 "median": statistics.median(commits_per_cycle),
-                "note": "counts = ACK lines per generation; sum over generations + "
-                        "graceful final = total_committed_events"},
+                "note": "random cycles only; injected + final accounted via "
+                        "committed_unacked"},
             "total_committed_events": total_events,
             "heads": heads,
             "last_acked_by_stream": last_acked_by_stream,
             "per_stream_gapless": per_stream_gapless,
-            "rollback_checks_all_zero": rollback_ok,
+            "rollback_head_equals_acked": rollback_ok,
             "random_probes_fail": random_probes_fail,
             "checks": checks,
             "pass": all(v is True for v in checks.values()),
         }
+        # boss item 8: hygiene — remove the temp dir on success
+        import shutil
+        if report["pass"]:
+            shutil.rmtree(tmp, ignore_errors=True)
         os.makedirs(EVIDENCE, exist_ok=True)
         with open(os.path.join(EVIDENCE, "p12_kill_report.json"), "w",
                   encoding="utf-8") as f:
