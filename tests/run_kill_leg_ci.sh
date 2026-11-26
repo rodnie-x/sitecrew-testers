@@ -25,14 +25,18 @@ adb root
 sleep 2
 adb forward tcp:18110 tcp:8080
 
-echo "== first launch: payload extraction + python boot (up to 300 s, untouched) =="
+echo "== first launch: payload extraction + python boot (up to 900 s, untouched) =="
 adb shell am start -n com.sitecrew.ai/org.kivy.android.PythonActivity || true
 up=0
-for i in $(seq 1 100); do
+for i in $(seq 1 300); do
   if curl -s -m 3 "$BASE/api/state" > /dev/null 2>&1; then
     up=1
     echo "server up after ~$((i * 3)) s"
     break
+  fi
+  # show extraction progress every 30 s so the log proves liveness
+  if [ $((i % 10)) -eq 0 ]; then
+    echo "waiting... ${i}x3s (extraction ongoing)"
   fi
   sleep 3
 done
