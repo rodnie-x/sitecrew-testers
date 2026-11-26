@@ -22,7 +22,8 @@ CYCLES = 50
 
 class MigrationKills(unittest.TestCase):
     def test_50_migration_kill_cycles(self):
-        tmp = tempfile.mkdtemp(prefix="sc_mig_")
+        big_drive = "D:/" if os.path.exists("D:/") else None
+        tmp = tempfile.mkdtemp(prefix="sc_mig_", dir=big_drive)
         seed = random.randrange(2 ** 31)
         rng = random.Random(seed)
         results = []

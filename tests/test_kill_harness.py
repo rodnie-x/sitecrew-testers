@@ -71,7 +71,8 @@ class MarkerReader(threading.Thread):
 
 class KillHarnessV2(unittest.TestCase):
     def test_p12_kill_harness_v2(self):
-        tmp = tempfile.mkdtemp(prefix="sc_kill2_")
+        big_drive = "D:/" if os.path.exists("D:/") else None
+        tmp = tempfile.mkdtemp(prefix="sc_kill2_", dir=big_drive)
         db_path = os.path.join(tmp, "sitecrew.db")
         seed = random.randrange(2 ** 31)
         rng = random.Random(seed)
