@@ -129,25 +129,9 @@ jobs:
           disable-animations: true
           script: |
             set -e
-            adb wait-for-device
-            echo "cwd: $(pwd)"
-            ls -la apk-build || true
-            APK=$(ls apk-build/*.apk 2>/dev/null | head -n 1)
-            if [ -z "$APK" ]; then APK=apk-build/sitecrew-debug-0.1.apk; fi
-            echo "APK: $APK"
-            test -f "$APK"
-            adb install -r -t "$APK"
-            adb root
-            sleep 2
-            # boot the app once so p4a unpacks the payload, then enable the store flag
-            adb shell am start -n com.sitecrew.ai/org.kivy.android.PythonActivity || true
-            sleep 25
-            adb shell "echo 1 > /data/data/com.sitecrew.ai/files/app/SITECREW_STORE"
-            adb shell am force-stop com.sitecrew.ai
-            adb forward tcp:18110 tcp:8080
-            export SC_ADB=adb
+            chmod +x tests/run_kill_leg_ci.sh
             export SC_CYCLES=${{ inputs.cycles }}
-            python tests/device_kill_leg.py
+            bash tests/run_kill_leg_ci.sh
 
       - name: Print kill-leg summary
         if: always()
