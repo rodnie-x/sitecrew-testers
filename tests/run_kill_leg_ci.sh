@@ -28,4 +28,5 @@ adb forward tcp:18110 tcp:8080
 
 export SC_ADB=adb
 export SC_CYCLES="$CYCLES"
+export SC_BOOT_TIMEOUT=240
 python tests/device_kill_leg.py

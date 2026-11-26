@@ -44,6 +44,27 @@ def wait_server(timeout=120):
     return False
 
 
+def dump_diagnostics(out_dir, tag):
+    """On failure: one logcat dump + process state (event-driven single capture)."""
+    os.makedirs(out_dir, exist_ok=True)
+    try:
+        pid = adb_helpers.pid()
+        with open(os.path.join(out_dir, tag + "_pidof.txt"), "w") as f:
+            f.write(pid or "NO PROCESS")
+    except Exception as e:
+        pid = "?"
+        with open(os.path.join(out_dir, tag + "_pidof.txt"), "w") as f:
+            f.write("error: %s" % e)
+    try:
+        out, _ = adb_helpers.adb("logcat", "-d", "-v", "time", timeout=60)
+        with open(os.path.join(out_dir, tag + "_logcat.txt"), "w",
+                  encoding="utf-8", errors="replace") as f:
+            f.write(out[-200000:])   # tail: the boot attempt is at the end
+    except Exception as e:
+        with open(os.path.join(out_dir, tag + "_logcat.txt"), "w") as f:
+            f.write("logcat failed: %s" % e)
+
+
 def wait_acks(before, expected, timeout=45):
     """Event-driven: watch logcat for SC_STORE_ACK markers until expected count.
 
@@ -72,15 +93,42 @@ def wait_acks(before, expected, timeout=45):
     return before  # honest degradation: count only what was confirmed
 
 
+def dump_diagnostics(out_dir, tag):
+    """On boot failure: ONE logcat dump + process state (event-driven, no polling)."""
+    os.makedirs(out_dir, exist_ok=True)
+    try:
+        pid = adb_helpers.pid()
+        with open(os.path.join(out_dir, tag + "_pidof.txt"), "w") as f:
+            f.write(pid or "NO PROCESS")
+    except Exception as e:
+        with open(os.path.join(out_dir, tag + "_pidof.txt"), "w") as f:
+            f.write("error: %s" % e)
+    try:
+        out, _ = adb_helpers.adb("logcat", "-d", "-v", "time", timeout=60)
+        with open(os.path.join(out_dir, tag + "_logcat.txt"), "w",
+                  encoding="utf-8", errors="replace") as f:
+            f.write(out[-300000:])   # tail: the boot attempt is at the end
+    except Exception as e:
+        with open(os.path.join(out_dir, tag + "_logcat.txt"), "w") as f:
+            f.write("logcat failed: %s" % e)
+
+
 def main():
     if not adb_helpers.serial():
         print(json.dumps({"pass": False, "error": "no adb device"}))
         return 1
     adb_helpers.forward(18110)
+    boot_timeout = int(os.environ.get("SC_BOOT_TIMEOUT", "240"))
     if not adb_helpers.wait_server(BASE, timeout=90):
         adb_helpers.launch()
-        if not adb_helpers.wait_server(BASE, timeout=120):
-            print(json.dumps({"pass": False, "error": "server unreachable"}))
+        if not adb_helpers.wait_server(BASE, timeout=boot_timeout):
+            dump_diagnostics(os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "tests", "evidence"), "boot_failure")
+            print(json.dumps({"pass": False,
+                              "error": "server unreachable after launch "
+                                       "(diagnostics: tests/evidence/"
+                                       "boot_failure_logcat.txt)"}))
             return 1
 
     acks_seen = 0
