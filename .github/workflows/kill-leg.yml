@@ -132,9 +132,10 @@ jobs:
             adb wait-for-device
             echo "cwd: $(pwd)"
             ls -la apk-build || true
-            APK=$(find . -maxdepth 3 -name "*.apk" -type f 2>/dev/null | head -n 1)
+            APK=$(ls apk-build/*.apk 2>/dev/null | head -n 1)
+            if [ -z "$APK" ]; then APK=apk-build/sitecrew-debug-0.1.apk; fi
             echo "APK: $APK"
-            test -n "$APK"
+            test -f "$APK"
             adb install -r -t "$APK"
             adb root
             sleep 2
