@@ -89,7 +89,7 @@ class KillHarnessV2(unittest.TestCase):
             proc = subprocess.Popen(
                 [sys.executable, WRITER, db_path, os.path.join(tmp, "acks.txt"),
                  fault, str(fault_k)],
-                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             reader = MarkerReader(proc)
             reader.start()
             return proc, reader
@@ -122,6 +122,9 @@ class KillHarnessV2(unittest.TestCase):
             commits_per_cycle.append(committed)
             if reader.begins > len(reader.acks):    # BEGIN written, no ACK: kill hit
                 unacked_begin_kills += 1            # real work mid-flight
+            if (_ + 1) % 50 == 0:
+                print("random kills: %d/200 (unacked so far: %d)"
+                      % (_ + 1, unacked_begin_kills), flush=True)
                 # boss item 3: committed-but-unacked rows (BEGIN, no ACK) must be
                 # verified BOTH-PRESENT (state row + event, 0 orphans) after reopen
                 conn_probe = sdb.connect(db_path)

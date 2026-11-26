@@ -67,6 +67,9 @@ class EventStore:
     def __init__(self, path):
         self.path = path
         self.conn, self.version = db.open_db(path)
+        # reads go through a query_only connection (boss precondition: the writer
+        # connection never serves reads; query_only refuses accidental writes)
+        self._read = db.connect(path, read_only=True)
         self._writer = threading.Lock()          # process-wide writer lock
         self._cond = threading.Condition()       # notified on every append
         self._heads = {}
@@ -139,7 +142,7 @@ class EventStore:
         return self.envelope_for(stream, seq)
 
     def envelope_for(self, stream, seq):
-        row = self.conn.execute(
+        row = self._read.execute(
             "SELECT * FROM events WHERE chat_id=? AND seq=?", (stream, seq)).fetchone()
         return to_envelope(row)
 
@@ -148,7 +151,7 @@ class EventStore:
         return self._heads.get(stream, 0)
 
     def events_after(self, stream, cursor, limit):
-        rows = self.conn.execute(
+        rows = self._read.execute(
             "SELECT * FROM events WHERE chat_id=? AND seq>? ORDER BY seq ASC LIMIT ?",
             (stream, cursor, limit)).fetchall()
         return [to_envelope(r) for r in rows]
@@ -200,22 +203,23 @@ class EventStore:
 
     # ------------------------------------------------------------ invariants
     def check_invariants(self):
-        """Returns dict of check → detail. PASS means every problem list is empty."""
+        """Returns dict of check → detail. PASS means every problem list is empty.
+        Runs on the query_only read connection (boss precondition)."""
         problems = {}
+        ro = self._read
 
-        ic = self.conn.execute("PRAGMA integrity_check").fetchone()[0]
+        ic = ro.execute("PRAGMA integrity_check").fetchone()[0]
         problems["integrity_check"] = [] if ic == "ok" else [ic]
-        fk = self.conn.execute("PRAGMA foreign_key_check").fetchall()
+        fk = ro.execute("PRAGMA foreign_key_check").fetchall()
         problems["foreign_key_check"] = [tuple(r) for r in fk]
 
         # no chats row may be the literal office stream (boss ruling)
-        bad = [r[0] for r in self.conn.execute(
-            "SELECT id FROM chats WHERE id='office'")]
+        bad = [r[0] for r in ro.execute("SELECT id FROM chats WHERE id='office'")]
         problems["office_chat_id"] = bad
 
         # seq contiguous 1..head per stream, and heads cache agrees
         gaps = []
-        for row in self.conn.execute(
+        for row in ro.execute(
                 "SELECT chat_id, MIN(seq) AS lo, MAX(seq) AS hi, COUNT(*) AS n"
                 " FROM events GROUP BY chat_id"):
             if row["lo"] != 1 or row["n"] != row["hi"]:
@@ -227,12 +231,12 @@ class EventStore:
 
         # messages ↔ message.created (same id), both directions
         orphans = []
-        for r in self.conn.execute(
+        for r in ro.execute(
                 "SELECT m.id, m.chat_id FROM messages m WHERE NOT EXISTS"
                 " (SELECT 1 FROM events e WHERE e.chat_id=m.chat_id AND e.id=m.id"
                 "  AND e.type='message.created')"):
             orphans.append({"message": r["id"], "chat": r["chat_id"]})
-        for r in self.conn.execute(
+        for r in ro.execute(
                 "SELECT e.id, e.chat_id FROM events e WHERE e.type='message.created'"
                 " AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.chat_id=e.chat_id"
                 " AND m.id=e.id)"):
@@ -241,7 +245,7 @@ class EventStore:
 
         # tool_calls.committed_seq ↔ tool.committed event in the same chat stream
         tool_orphans = []
-        for r in self.conn.execute(
+        for r in ro.execute(
                 "SELECT tc.id, tc.committed_seq, t.chat_id FROM tool_calls tc"
                 " JOIN turns t ON t.id=tc.turn_id"
                 " WHERE tc.committed_seq IS NOT NULL AND NOT EXISTS"
@@ -249,7 +253,7 @@ class EventStore:
                 "  AND e.seq=tc.committed_seq AND e.type='tool.committed')"):
             tool_orphans.append({"tool_call": r["id"], "chat": r["chat_id"],
                                  "committed_seq": r["committed_seq"]})
-        for r in self.conn.execute(
+        for r in ro.execute(
                 "SELECT e.chat_id, e.seq, e.id FROM events e"
                 " WHERE e.type='tool.committed' AND NOT EXISTS"
                 " (SELECT 1 FROM tool_calls tc JOIN turns t ON t.id=tc.turn_id"
@@ -259,7 +263,7 @@ class EventStore:
         problems["tool_links"] = tool_orphans
 
         # cases.turn_id ↔ turns.case_id agree wherever both are set (boss invariant)
-        disagree = [dict(r) for r in self.conn.execute(
+        disagree = [dict(r) for r in ro.execute(
             "SELECT c.id, c.turn_id, t.case_id FROM cases c"
             " JOIN turns t ON t.id=c.turn_id"
             " WHERE c.turn_id IS NOT NULL AND t.case_id IS NOT NULL"
@@ -268,7 +272,7 @@ class EventStore:
 
         # unknown event types (strict catalog)
         unknown = []
-        for r in self.conn.execute("SELECT DISTINCT type FROM events"):
+        for r in ro.execute("SELECT DISTINCT type FROM events"):
             if not db.event_type_known(r["type"]):
                 unknown.append(r["type"])
         problems["unknown_event_types"] = unknown
@@ -277,6 +281,10 @@ class EventStore:
         return problems
 
     def close(self):
+        try:
+            self._read.close()
+        except Exception:
+            pass
         try:
             self.conn.close()
         except Exception:
