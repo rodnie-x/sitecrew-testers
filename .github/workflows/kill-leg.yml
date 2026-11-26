@@ -130,7 +130,9 @@ jobs:
           script: |
             set -e
             adb wait-for-device
-            APK=$(find apk-build -name "*.apk" -type f | head -n 1)
+            echo "cwd: $(pwd)"
+            ls -la apk-build || true
+            APK=$(find "$GITHUB_WORKSPACE" -name "*.apk" -type f 2>/dev/null | head -n 1)
             echo "APK: $APK"
             test -n "$APK"
             adb install -r -t "$APK"
