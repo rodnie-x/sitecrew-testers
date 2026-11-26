@@ -37,8 +37,12 @@ for i in $(seq 1 100); do
   sleep 3
 done
 if [ "$up" != "1" ]; then
-  echo "server never came up on first boot"
-  adb logcat -d -v time > boot_failure_logcat.txt || true
+  echo "server never came up on first boot — capturing diagnostics"
+  mkdir -p tests/evidence
+  adb logcat -d -v time > tests/evidence/boot_failure_logcat.txt || true
+  echo "=== python-related logcat lines ==="
+  grep -i "python\|kivy\|sitecrew\|Traceback\|FATAL" tests/evidence/boot_failure_logcat.txt | head -80 || true
+  echo "=== end diagnostics ==="
   exit 1
 fi
 
