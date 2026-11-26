@@ -1,0 +1,51 @@
+{
+  "seed": 1628412648,
+  "platform": "win32",
+  "v": 2,
+  "kills": {
+    "random": 200,
+    "after_state": 25,
+    "after_event": 25,
+    "before_commit": 25,
+    "after_commit_before_ack": 25
+  },
+  "total_kills": 300,
+  "unacked_begin_random_kills": 194,
+  "commits_per_cycle": {
+    "min": 0,
+    "max": 20534,
+    "median": 7986.5
+  },
+  "total_committed_events": 29572,
+  "heads": {
+    "c_k1": 7393,
+    "c_k2": 7393,
+    "c_k3": 7393,
+    "office": 7393
+  },
+  "last_acked_by_stream": {
+    "c_k1": 7393,
+    "c_k2": 7393,
+    "c_k3": 7393,
+    "office": 7393
+  },
+  "per_stream_gapless": {
+    "c_k1": true,
+    "c_k2": true,
+    "c_k3": true,
+    "office": true
+  },
+  "rollback_checks_all_zero": true,
+  "checks": {
+    "total_committed_events_ge_10000": true,
+    "per_stream_gapless": true,
+    "ack_rule_per_stream": true,
+    "message_links_orphans_zero": true,
+    "tool_links_orphans_zero": true,
+    "rollback_modes_inflight_absent": true,
+    "unacked_begin_random_kills_ge_25pct": true,
+    "integrity_check": true,
+    "foreign_key_check_empty": true
+  },
+  "pass": true
+}

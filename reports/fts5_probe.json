@@ -1,0 +1,10 @@
+{
+  "platform": "win32",
+  "python": "3.12.10",
+  "sqlite_version": "3.49.1",
+  "journal_mode_wal": "wal",
+  "fts5_in_compile_options": true,
+  "fts5_create_and_match": true,
+  "backend": "fts5",
+  "tested_at": "pc"
+}

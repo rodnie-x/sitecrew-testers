@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.android import adb_helpers  # noqa: E402
 
 BASE = "http://127.0.0.1:18110"
-CYCLES = int(os.environ.get('SC_CYCLES', '20'))
+CYCLES = 20
 PKG = "com.sitecrew.ai"
 
 

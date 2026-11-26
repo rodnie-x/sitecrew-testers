@@ -1,0 +1,13 @@
+# DEVIATIONS — recorded per the boss's rule (blueprint addendum rule 6)
+
+Every deviation from the blueprint/orders, with the reason and evidence.
+
+| # | Deviation | Reason | Evidence | Status |
+| --- | --- | --- | --- | --- |
+| D1 | P1.2 ACK channel is a flushed append-only **file**, not a pipe | `subprocess.pass_fds` is Unix-only; a flushed file keeps the exact after-commit-only semantics portably on Windows. Boss APPROVED with the condition that all harness markers use unbuffered os.write — done in kill_writer v2 (READY/BEGIN/ACK via os.write) | tests/evidence/p12_kill_report.json | **CLOSED — approved conditionally, condition met** |
+| D2 | Writer self-kill uses `os._exit(9)` instead of `signal.SIGKILL` | SIGKILL does not exist on Windows; `os._exit(9)` is the equivalent hard exit. Boss APPROVED keeping os._exit(9) for injection points; random kills converted to external `Popen.kill()` from outside (v2 harness) | tests/evidence/p12_kill_report.json (v2) | **CLOSED — approved, implemented in v2** |
+| D3 | Poll wakeup was notify + 2 s safety tick; boss ruled check-then-wait under the same condition lock with a **1 s belt** | The 2 s tick could not meet the 300 ms P1.3 latency budget | sitecrew/store/events.py poll() rewritten; deterministic race test added (test_eventstore.test_deterministic_race_between_check_and_wait); recorded in the step-2 report | **FIXED in code — awaiting boss confirmation in step-3 report** |
+| D4 | FTS5 probe recorded PC-only so far (`tested_at: pc`) | The device leg needs the store inside the APK (Phase 1 mirror deployment); probing the phone's own SQLite happens then | reports/fts5_probe.json; device probe now recorded in reports/fts5_probe_device.json (backend = brain_terms on Android 3.35.5) | **CLOSED — device probe recorded** |
+| D5 | Registry divergence found in Phase 0 (documented, unfixed by design) | `/api/tools` toggles crew.registry but the offline local path uses the separate `_LOCAL` registry | docs/ASSUMPTIONS.md §G; characterized by tests/test_characterization_pc.py | Scheduled — Phase 2 LocalRouter unifies |
+| D6 | Used chips attach even on failed jobs (found in Phase 0) | `_run_job`'s finally attaches tool_counts regardless of outcome | server/app.py:401-415; docs/ASSUMPTIONS.md §G | Scheduled — Phase 2/3 commit-only chips |
+| D7 | G0 device test "crew reply has battery facts + chip" open | Environmental: the phone had no usable internet for the NVIDIA call at test time; offline queuing behaved correctly | reports/gate-0/summary.md; boss ruled: re-run with connectivity preflight before G1 signs | Open — re-run pending |

@@ -1,0 +1,161 @@
+{
+  "cycles": 20,
+  "kills": 20,
+  "final_head": 161,
+  "invariants_pass": true,
+  "invariants": {
+    "_pass": true,
+    "case_turn_agreement": [],
+    "foreign_key_check": [],
+    "integrity_check": [],
+    "message_links": [],
+    "office_chat_id": [],
+    "seq_contiguous": [],
+    "tool_links": [],
+    "unknown_event_types": []
+  },
+  "log": [
+    {
+      "cycle": 0,
+      "batch": 2,
+      "before_head": 102,
+      "after_head": 104,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 1,
+      "batch": 3,
+      "before_head": 104,
+      "after_head": 107,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 2,
+      "batch": 4,
+      "before_head": 107,
+      "after_head": 111,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 3,
+      "batch": 2,
+      "before_head": 111,
+      "after_head": 113,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 4,
+      "batch": 3,
+      "before_head": 113,
+      "after_head": 116,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 5,
+      "batch": 4,
+      "before_head": 116,
+      "after_head": 120,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 6,
+      "batch": 2,
+      "before_head": 120,
+      "after_head": 122,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 7,
+      "batch": 3,
+      "before_head": 122,
+      "after_head": 125,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 8,
+      "batch": 4,
+      "before_head": 125,
+      "after_head": 129,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 9,
+      "batch": 2,
+      "before_head": 129,
+      "after_head": 131,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 10,
+      "batch": 3,
+      "before_head": 131,
+      "after_head": 134,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 11,
+      "batch": 4,
+      "before_head": 134,
+      "after_head": 138,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 12,
+      "batch": 2,
+      "before_head": 138,
+      "after_head": 140,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 13,
+      "batch": 3,
+      "before_head": 140,
+      "after_head": 143,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 14,
+      "batch": 4,
+      "before_head": 143,
+      "after_head": 147,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 15,
+      "batch": 2,
+      "before_head": 147,
+      "after_head": 149,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 16,
+      "batch": 3,
+      "before_head": 149,
+      "after_head": 152,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 17,
+      "batch": 4,
+      "before_head": 152,
+      "after_head": 156,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 18,
+      "batch": 2,
+      "before_head": 156,
+      "after_head": 158,
+      "invariants_pass": true
+    },
+    {
+      "cycle": 19,
+      "batch": 3,
+      "before_head": 158,
+      "after_head": 161,
+      "invariants_pass": true
+    }
+  ],
+  "acks_seen": 0,
+  "pass": true
+}

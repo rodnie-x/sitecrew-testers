@@ -1,0 +1,10 @@
+{
+  "platform": "android",
+  "tested_at": "device (in-app Python via /api/v2/debug/fts5-probe)",
+  "sqlite_version": "3.35.5",
+  "journal_mode_wal": "memory (in-memory probe connection)",
+  "fts5_in_compile_options": false,
+  "fts5_create_and_match": false,
+  "fts5_error": "no such module: fts5",
+  "backend": "brain_terms"
+}
