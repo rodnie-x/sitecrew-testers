@@ -164,6 +164,8 @@ class KillHarnessV2(unittest.TestCase):
                 reader.join(timeout=10)             # drain fully before accounting
                 collect(reader)
                 kills[mode] += 1
+                if (i + 1) % 10 == 0:
+                    print("injected %s: %d/25 done" % (mode, i + 1), flush=True)
                 if mode in ("after_state", "after_event", "before_commit"):
                     # in-flight tx must be fully absent: quick orphan probe
                     conn = sdb.connect(db_path)
