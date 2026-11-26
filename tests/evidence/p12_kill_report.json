@@ -1,5 +1,5 @@
 {
-  "seed": 2083618289,
+  "seed": 1880954174,
   "platform": "win32",
   "v": 3,
   "db_model": "ONE accumulating DB across all cycles (no fresh DBs); commits_per_cycle counts ACKs drained per generation",
@@ -11,25 +11,25 @@
     "after_commit_before_ack": 25
   },
   "total_kills": 300,
-  "unacked_begin_random_kills": 195,
+  "unacked_begin_random_kills": 196,
   "commits_per_cycle": {
     "min": 0,
-    "max": 514,
-    "median": 174.5,
+    "max": 207,
+    "median": 65.0,
     "note": "counts = ACK lines per generation; sum over generations + graceful final = total_committed_events"
   },
-  "total_committed_events": 45445,
+  "total_committed_events": 541366,
   "heads": {
-    "c_k1": 11361,
-    "c_k2": 11362,
-    "c_k3": 11361,
-    "office": 11361
+    "c_k1": 135341,
+    "c_k2": 135342,
+    "c_k3": 135342,
+    "office": 135341
   },
   "last_acked_by_stream": {
-    "c_k1": 11361,
-    "c_k2": 11362,
-    "c_k3": 11361,
-    "office": 11361
+    "c_k1": 135341,
+    "c_k2": 135342,
+    "c_k3": 135342,
+    "office": 135341
   },
   "per_stream_gapless": {
     "c_k1": true,
