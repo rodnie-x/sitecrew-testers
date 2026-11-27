@@ -61,8 +61,27 @@ def main():
         except Exception:
             server.kill()
 
-    report["app_py_sha256"] = hashlib.sha256(
-        open(os.path.join(REPO, "server", "app.py"), "rb").read()).hexdigest()
+    report["self_recorded_hashes"] = {
+        "api_v2": hashlib.sha256(
+            open(os.path.join(REPO, "sitecrew", "api_v2.py"), "rb").read()).hexdigest(),
+        "poll_js": hashlib.sha256(
+            open(os.path.join(REPO, "server", "static", "poll.js"), "rb").read()).hexdigest(),
+        "app_py": hashlib.sha256(
+            open(os.path.join(REPO, "server", "app.py"), "rb").read()).hexdigest(),
+    }
+    # boss: check the self-recorded hashes against p13_sha256s.txt
+    import re as _re
+    frozen = {}
+    for line in open(os.path.join(REPO, "tests", "evidence", "p13_sha256s.txt"),
+                     encoding="utf-8"):
+        m = _re.match(r"^([0-9a-f]{64})\s+(\S+)", line.strip())
+        if m:
+            frozen[m.group(2)] = m.group(1)
+    report["hash_checks_vs_p13_list"] = {
+        "sitecrew/api_v2.py": frozen.get("sitecrew/api_v2.py") == report["self_recorded_hashes"]["api_v2"],
+        "server/static/poll.js": frozen.get("server/static/poll.js") == report["self_recorded_hashes"]["poll_js"],
+        "server/app.py": frozen.get("server/app.py") == report["self_recorded_hashes"]["app_py"],
+    }
     report["pass_note"] = (
         "machine-generated metrics only; verdict belongs to the boss. "
         "slots_free_promptly iff http_503 == 0.")

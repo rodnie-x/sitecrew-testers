@@ -1,22 +1,36 @@
 {
   "mode": "storm",
   "wait_used": 25,
-  "duration_s": 90,
-  "forced_reconnects": 317,
-  "polls": 362,
+  "duration_s": 189,
+  "forced_reconnects": 247,
+  "polls": 283,
   "errors": 0,
   "http_503": 0,
   "http_other_4xx5xx": 0,
-  "http_2xx": 89,
-  "events_appended": 44,
-  "events_applied": 44,
+  "http_2xx_polls": 35,
+  "reconciliation": "polls == forced + 2xx_polls + other_4xx5xx + in-flight-at-exit (the appender's POSTs are no longer counted)",
+  "events_appended": 35,
+  "events_applied": 35,
   "longest_consecutive_503": 0,
+  "liveness_path": [
+    "werkzeug-socket-peek"
+  ],
   "time_to_first_event_after_reconnect_ms": {
-    "n": 40,
-    "p50": 176,
-    "max": 1894
+    "n": 33,
+    "p50": 169,
+    "max": 1948,
+    "note": "event cadence (~2 s append interval) \u2014 NOT reconnect cost; the device half uses the catch-up metric"
   },
-  "verdict_note": "slots_free_promptly = http_503 == 0; else the parked-slot hold is confirmed on PC and api_v2.py must change (freeze reopening, boss decision).",
-  "app_py_sha256": "5ad83c82a4c256675d75eed1e59ab5e8639f312c9fc7bb59b88a6d6200cd8713",
+  "verdict_note": "slots_free_promptly = http_503 == 0.",
+  "self_recorded_hashes": {
+    "api_v2": "0af0b0fe0f3d15623b17d4f34b15fe23a2b09dc8916f8ad6e6887ba601f20967",
+    "poll_js": "370e234afe8cb9a5d974078f31f930775693fedd606fab2aa21e6eb91dbaad42",
+    "app_py": "2d4d731aa20d620cce985cb65c9e50f021b0fce7964b2e4e77e03371973860db"
+  },
+  "hash_checks_vs_p13_list": {
+    "sitecrew/api_v2.py": true,
+    "server/static/poll.js": true,
+    "server/app.py": true
+  },
   "pass_note": "machine-generated metrics only; verdict belongs to the boss. slots_free_promptly iff http_503 == 0."
 }

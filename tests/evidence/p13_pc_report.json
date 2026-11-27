@@ -1,47 +1,63 @@
 {
   "pass": true,
   "gate": "P1.3 PC half: committed event -> polling client <= 300 ms; 100 forced reconnects produce a DOM identical to an uninterrupted run (blueprint gates line 857)",
-  "seed": 722745615,
+  "seed": 1536657012,
   "commit": "6a367ce43fb2",
   "store_module_hashes": {
     "sitecrew/store/db.py": "1d8c925417fd70faa427474e31e9cb31a42bde06e64e5b737729a51abb72e547",
     "sitecrew/store/events.py": "f2a9716d658e515ba677d9e0425e384ebe61efc6ddc3461e3f21a88a4591e715",
     "sitecrew/api_v2.py": "0af0b0fe0f3d15623b17d4f34b15fe23a2b09dc8916f8ad6e6887ba601f20967"
   },
+  "self_recorded_hashes": {
+    "sitecrew/api_v2.py": "0af0b0fe0f3d15623b17d4f34b15fe23a2b09dc8916f8ad6e6887ba601f20967",
+    "server/static/poll.js": "370e234afe8cb9a5d974078f31f930775693fedd606fab2aa21e6eb91dbaad42",
+    "server/app.py": "2d4d731aa20d620cce985cb65c9e50f021b0fce7964b2e4e77e03371973860db"
+  },
+  "hash_checks_vs_p13_list": {
+    "sitecrew/api_v2.py": true,
+    "server/static/poll.js": true,
+    "server/app.py": true
+  },
   "latency": {
     "mode": "latency",
-    "seed": 722745615,
+    "seed": 1536657012,
     "stream": "c_debug",
-    "start_cursor": 937,
+    "start_cursor": 2219,
     "samples": 200,
     "received": 200,
     "misses": 0,
-    "p50_ms": 7,
-    "p95_ms": 20,
-    "max_ms": 61,
-    "mean_ms": 9,
-    "latency_definition": "t0 = just before the append POST is sent; t1 = the poll client's onEvents fired for that seq. Includes append RTT + parking wakeup + poll response RTT (slightly conservative)."
+    "p50_ms": 15,
+    "p95_ms": 131,
+    "max_ms": 313,
+    "mean_ms": 32,
+    "latency_definition": "t0 = just before the append POST is sent; t1 = the poll client's onEvents fired for that seq. Includes append RTT + parking wakeup + poll response RTT (slightly conservative).",
+    "liveness_path": [
+      "werkzeug-socket-peek"
+    ]
   },
   "reconnect": {
     "mode": "reconnect",
-    "seed": 722745615,
+    "seed": 1536657012,
     "stream": "c_debug",
-    "start_cursor": 1137,
-    "final_head": 1257,
+    "start_cursor": 2419,
+    "final_head": 2539,
     "events_appended": 120,
-    "append_posts": 43,
-    "forced_reconnects": 101,
-    "chaos_polls": 207,
+    "append_posts": 34,
+    "forced_reconnects": 100,
+    "chaos_polls": 191,
     "chaos_errors": 0,
     "chaos_dupes": 0,
     "chaos_gaps": 0,
     "ref_items": 120,
     "chaos_items": 120,
-    "ref_hash": "2c60bc2af7d98a0c",
-    "chaos_hash": "2c60bc2af7d98a0c",
+    "ref_hash": "d89474769e322d44",
+    "chaos_hash": "d89474769e322d44",
     "hashes_equal": true,
     "cursors_equal": true,
     "wait_used": 2,
+    "liveness_path": [
+      "werkzeug-socket-peek"
+    ],
     "pass": true
   },
   "checks": {
@@ -50,6 +66,7 @@
     "reconnect_forced_ge_100": true,
     "reconnect_hashes_equal": true,
     "reconnect_cursors_equal": true,
-    "reconnect_no_losses": true
+    "reconnect_no_losses": true,
+    "self_recorded_hashes_match": true
   }
 }

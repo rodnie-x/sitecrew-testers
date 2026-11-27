@@ -1,0 +1,9 @@
+{
+  "what": "G0 reconcile (D7): device half of the originally failing G0 test, run green on the connected phone",
+  "failing_test_id": "test_characterization_device: crew reply has battery facts + chip (G0, reports/gate-0/summary.md)",
+  "what_reconciled_it": "phone connected with internet -> real NVIDIA crew call replied with battery facts (85%, charging, temp) and tools_used.battery=1 -> PASS",
+  "full_log_sha256": "e25c7d2ba1b1dad07acd017ffe452b4431e01f299a45905ddc3cba9fb662285f",
+  "scrubbed_log": "\ufeff=== G0 reconcile rerun (2026-11-27 20:46): device half, phone connected ===\nPASS state endpoint alive \u0393\u00c7\u00f6 ['activity', 'android', 'approvals', 'busy', 'busy_since', 'has_key', 'messages', 'models']\nPASS device reports phone_mode \u0393\u00c7\u00f6 True\nPASS device has key configured \u0393\u00c7\u00f6 True\nPASS battery answered on-device (zero data) \u0393\u00c7\u00f6 \u0393\u00dc\u00ed Answered on-device \u0393\u00c7\u00f6 no data used.\n\nBattery: 84% \u0393\u00c7\u00f6 charging \u0393\u00c7\u00f6 temp 36.0\u252c\u2591C\nPASS battery reply carries real tools_used \u0393\u00c7\u00f6 {'battery': 1}\nPASS tools tour deterministic \u0393\u00c7\u00f6 \u0393\u00a3\u00e0 The crew can use 26 phone tools right now:\n\u0393\u00c7\u00f3 send_sms \u0393\u00c7\u00f6 Se\nPASS undo removes exchange \u0393\u00c7\u00f6 {'ok': True, 'removed': 2}\nPASS conversational ask goes to crew \u0393\u00c7\u00f6 {'ok': True}\nPASS crew reply has battery facts + chip \u0393\u00c7\u00f6 Your battery is at 85% and it's currently charging, so you're in good shape \u0393\u00c7\u00f6 no need to w\nNOT RUN offline flap on device \u0393\u00c7\u00f6 needs airplane-mode toggle (human or root)\nNOT RUN sensitive device effects \u0393\u00c7\u00f6 no TEST_TARGETS\n",
+  "note": "chat/tool content scrubbed per the boss privacy ruling; the full log lives in the private sitecrew-ai tree",
+  "date": "2026-11-27 13:40:31"
+}

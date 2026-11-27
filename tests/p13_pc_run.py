@@ -57,15 +57,16 @@ def wait_server(timeout=90):
     return False
 
 
-def run_node(mode, seed):
+def run_node(mode, seed, wait=None):
     env = dict(os.environ, NODE_NO_WARNINGS="1")
-    timeout = 240 if mode == "latency" else 420
-    proc = subprocess.run(
-        ["node", os.path.join(REPO, "tests", "p13_client.cjs"),
-         os.path.join(REPO, "server", "static", "poll.js"),
-         BASE, mode, str(seed), "c_debug"],
-        capture_output=True, text=True, timeout=timeout, encoding="utf-8",
-        errors="replace", cwd=REPO, env=env)
+    timeout = 240 if mode == "latency" else 480
+    cmd = ["node", os.path.join(REPO, "tests", "p13_client.cjs"),
+           os.path.join(REPO, "server", "static", "poll.js"),
+           BASE, mode, str(seed), "c_debug"]
+    if wait:
+        cmd.append(str(wait))
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                          encoding="utf-8", errors="replace", cwd=REPO, env=env)
     lines = [l for l in (proc.stdout or "").splitlines() if l.startswith("{")]
     if not lines:
         raise RuntimeError("node %s produced no JSON (rc=%s)\n%s\n%s"
@@ -95,13 +96,31 @@ def main():
             print(json.dumps({"pass": False, "error": "server did not start"}))
             return 1
         lat = run_node("latency", seed)
-        rec = run_node("reconnect", seed)
+        rec = run_node("reconnect", seed, wait=25)   # boss: reconnects at wait=25
     finally:
         server.terminate()
         try:
             server.wait(timeout=15)
         except Exception:
             server.kill()
+
+    # boss: every report self-records api_v2.py / poll.js / app.py hashes and
+    # checks them against p13_sha256s.txt
+    current = {
+        "sitecrew/api_v2.py": store_hashes()["sitecrew/api_v2.py"],
+        "server/static/poll.js": hashlib.sha256(
+            open(os.path.join(REPO, "server", "static", "poll.js"), "rb").read()).hexdigest(),
+        "server/app.py": hashlib.sha256(
+            open(os.path.join(REPO, "server", "app.py"), "rb").read()).hexdigest(),
+    }
+    frozen = {}
+    p13 = os.path.join(REPO, "tests", "evidence", "p13_sha256s.txt")
+    import re as _re
+    for line in open(p13, encoding="utf-8"):
+        m = _re.match(r"^([0-9a-f]{64})\s+(\S+)", line.strip())
+        if m:
+            frozen[m.group(2)] = m.group(1)
+    hash_checks = {name: bool(frozen.get(name) == h) for name, h in current.items()}
 
     checks = {
         "latency_p50_le_300": lat.get("p50_ms") is not None and lat["p50_ms"] <= 300,
@@ -110,6 +129,7 @@ def main():
         "reconnect_hashes_equal": bool(rec.get("hashes_equal")),
         "reconnect_cursors_equal": bool(rec.get("cursors_equal")),
         "reconnect_no_losses": rec.get("ref_items") == rec.get("chaos_items"),
+        "self_recorded_hashes_match": all(hash_checks.values()),
     }
     report = {
         "pass": all(checks.values()),
@@ -119,6 +139,8 @@ def main():
         "seed": seed,
         "commit": commit_hash(),
         "store_module_hashes": store_hashes(),
+        "self_recorded_hashes": current,
+        "hash_checks_vs_p13_list": hash_checks,
         "latency": lat,
         "reconnect": rec,
         "checks": checks,

@@ -92,7 +92,6 @@
     "unknown_event_types": []
   },
   "device": {
-    "serial": "103953738Q003608",
     "manufacturer": "TECNO",
     "model": "TECNO LH7n",
     "sdk": "34",
@@ -153,7 +152,9 @@
       "all_listeners_loopback": true
     },
     "launch_method": "am start -n com.sitecrew.ai/org.kivy.android.PythonActivity (packaging-specific, not OEM-specific)",
-    "build_artifact_sha256": "4a64e8a945e2a2a46e9797ab7d05997e895c38e7e47f70d66f0b2c8846d8524f"
+    "build_artifact_sha256": "4a64e8a945e2a2a46e9797ab7d05997e895c38e7e47f70d66f0b2c8846d8524f",
+    "serial_sha256": "41f18c11432279553144b80e560fb1424a6421742aee1e70f232bcfe184a89b2",
+    "serial_note": "raw serial held in private custody only (boss privacy ruling: hash the device serial in reports)"
   },
   "log": [
     {

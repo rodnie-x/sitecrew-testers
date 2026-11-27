@@ -18,7 +18,9 @@ const P = globalThis.SiteCrewPoll;
 if (!P) { console.error("SiteCrewPoll not exported"); process.exit(2); }
 
 const stream = streamArg || "c_debug";
+const waitOverride = parseInt(process.argv[8] || "0", 10) || 0;   // boss: reconnect at wait=25
 const seed = parseInt(seedArg, 10) >>> 0;
+const livenessSeen = new Set();     // X-Liveness-Path values from poll responses
 let s = seed || 1;
 function rng() {            // deterministic mulberry32
   s |= 0; s = (s + 0x6D2B79F5) | 0;
@@ -28,12 +30,38 @@ function rng() {            // deterministic mulberry32
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// global fetch wrapper: capture X-Liveness-Path for every poll response
+// (boss: record liveness_path in the reports); in storm mode it also counts
+// POLL responses only (the appender's POSTs previously inflated the counts —
+// boss reconciliation note: forced + returned + errored must equal polls)
+let COUNT_FETCH = false;
+const fetchCount = { p2xx: 0, p503: 0, pOther4xx5xx: 0 };
+const realFetch = globalThis.fetch;
+globalThis.fetch = async (url, opts) => {
+  const r = await realFetch(url, opts);
+  const u = String(url);
+  if (u.includes("/api/v2/poll")) {
+    const lp = r.headers && r.headers.get ? r.headers.get("X-Liveness-Path") : null;
+    if (lp) livenessSeen.add(lp);
+    if (COUNT_FETCH) {
+      if (r.status === 503) fetchCount.p503++;
+      else if (r.status >= 400) fetchCount.pOther4xx5xx++;
+      else fetchCount.p2xx++;
+    }
+  }
+  return r;
+};
+
 async function api(path, body) {
   const r = await fetch(base + path, {
     method: body ? "POST" : "GET",
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (path.startsWith("/api/v2/poll")) {
+    const lp = r.headers.get("X-Liveness-Path");
+    if (lp) livenessSeen.add(lp);      // boss: record liveness_path in reports
+  }
   if (!r.ok) throw new Error("HTTP " + r.status + " for " + path);
   return r.json();
 }
@@ -83,6 +111,7 @@ async function latency() {
     latency_definition: "t0 = just before the append POST is sent; t1 = the " +
       "poll client's onEvents fired for that seq. Includes append RTT + " +
       "parking wakeup + poll response RTT (slightly conservative).",
+    liveness_path: Array.from(livenessSeen),
   };
   console.log(JSON.stringify(out));
   process.exit(out.p95_ms != null && out.p95_ms <= 300 ? 0 : 1);
@@ -92,14 +121,15 @@ async function reconnect() {
   const st = await api("/api/v2/debug/store-state?db=main");
   const cursor0 = st.head || 0;
   const refState = { streams: {} }, chaosState = { streams: {} };
+  const waitS = waitOverride || 2;       // boss: run 100+ reconnects at wait=25
   const ref = P.create({
     baseUrl: base,                       // node fetch cannot do relative URLs
-    streams: { [stream]: cursor0 }, wait: 2,
+    streams: { [stream]: cursor0 }, wait: waitS,
     onEvents: (sName, evs) => evs.forEach((e) => P.reduceEvent(refState, e)),
   });
   const chaos = P.create({
     baseUrl: base,                       // node fetch cannot do relative URLs
-    streams: { [stream]: cursor0 }, wait: 2,
+    streams: { [stream]: cursor0 }, wait: waitS,
     chaos: { p: 0.7, maxMs: 250 },
     onEvents: (sName, evs) => evs.forEach((e) => P.reduceEvent(chaosState, e)),
   });
@@ -147,7 +177,8 @@ async function reconnect() {
     hashes_equal: refHash === chaosHash,
     cursors_equal: ref.cursors()[stream] === head &&
                    chaos.cursors()[stream] === head,
-    wait_used: 2,
+    wait_used: waitS,
+    liveness_path: Array.from(livenessSeen),
   };
   out.pass = out.hashes_equal && out.cursors_equal &&
              rs.items.length === head - cursor0 && chaos.stats.forced >= 100 &&
@@ -161,22 +192,16 @@ async function storm() {
   // storm at PRODUCTION wait=25. Risk: an aborted parked request keeps its
   // parked slot until the park expires (up to 25 s), so a client coming back
   // from a network drop could see 503 busy for up to 25 s — blowing the
-  // latency gate exactly when it matters. Metrics: 503 counts, longest 503
-  // window, and time-to-first-event after each reconnect.
-  let status503 = 0, other4xx5xx = 0, ok200 = 0;
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = async (url, opts) => {
-    const r = await realFetch(url, opts);
-    if (r.status === 503) { status503++; last503at = Date.now(); cur503run++; }
-    else if (r.status >= 400) other4xx5xx++;
-    else ok200++;
-    return r;
-  };
-
+  // latency gate exactly when it matters. Metrics: 503 counts (POLL responses
+  // only — the appender's POSTs are not polls), longest 503 window, and
+  // time-to-first-event after each reconnect (event cadence — NOT cited as
+  // reconnect cost).
+  COUNT_FETCH = true;
   const st = await api("/api/v2/debug/store-state?db=main");
   const cursor0 = st.head || 0;
   const chaosState = { streams: {} };
-  let lastForced = 0, lastAbortAt = null;
+  let lastForced = 0, lastAbortAt = null, last503at = null;
+  let longest503run = 0, cur503run = 0;
   const ttfs = [];
   let appliedTotal = 0;
   const chaos = P.create({
@@ -194,10 +219,8 @@ async function storm() {
   const t0 = Date.now();
   const DURATION = 90000;
   let appended = 0;
-  let longest503run = 0, cur503run = 0, runStart = null, longest503ms = 0;
-  let last503at = null;
   const t503 = setInterval(() => {
-    // sample forced-abort counter to timestamp reconnects
+    // sample the forced-abort counter to timestamp reconnects
     if (chaos.stats.forced > lastForced) { lastForced = chaos.stats.forced; lastAbortAt = Date.now(); }
     if (last503at != null && Date.now() - last503at > 1500) {
       if (cur503run > longest503run) longest503run = cur503run;
@@ -211,15 +234,19 @@ async function storm() {
         mode: "storm", wait_used: 25, duration_s: Math.round((Date.now() - t0) / 1000),
         forced_reconnects: chaos.stats.forced,
         polls: chaos.stats.polls, errors: chaos.stats.errors,
-        http_503: status503, http_other_4xx5xx: other4xx5xx, http_2xx: ok200,
+        http_503: fetchCount.p503, http_other_4xx5xx: fetchCount.pOther4xx5xx,
+        http_2xx_polls: fetchCount.p2xx,
+        reconciliation: "polls == forced + 2xx_polls + other_4xx5xx + in-flight-at-exit (the appender's POSTs are no longer counted)",
         events_appended: appended, events_applied: appliedTotal,
         longest_consecutive_503: longest503run || cur503run,
+        liveness_path: Array.from(livenessSeen),
         time_to_first_event_after_reconnect_ms: {
           n: ttfs.length,
           p50: sorted.length ? sorted[Math.floor(sorted.length * 0.5)] : null,
           max: sorted.length ? sorted[sorted.length - 1] : null,
+          note: "event cadence (~2 s append interval) — NOT reconnect cost; the device half uses the catch-up metric",
         },
-        verdict_note: "slots_free_promptly = http_503 == 0; else the parked-slot hold is confirmed on PC and api_v2.py must change (freeze reopening, boss decision).",
+        verdict_note: "slots_free_promptly = http_503 == 0.",
       };
       console.log(JSON.stringify(out));
       process.exit(0);
