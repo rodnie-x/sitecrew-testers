@@ -852,6 +852,116 @@ def debug_proc_stat():
         return jsonify({"error": str(e)[:200]}), 500
 
 
+_PROBE_RESULTS = {"results": None}
+
+
+@app.get("/api/v2/debug/probe-page")
+def debug_probe_page():
+    """P1.3 device half (boss spec): the in-page probe, served INTO the real
+    WebView (debug-gated). It loads the real /static/poll.js, records the hash
+    of the poll.js THIS page fetched, reads X-Liveness-Path in-page, then
+    measures t0 (before the append POST) -> t1 (onEvents) with a single
+    performance.now() clock over 200 samples, and POSTs the results to
+    /api/v2/debug/probe-results (read by the harness over adb forward)."""
+    if not _store_enabled() or not _debug_enabled():
+        return jsonify({"error": "store/debug flag off"}), 404
+    html = (
+        '<!doctype html><html><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        "<title>P1.3 in-page probe</title>"
+        '<script src="/static/poll.js"></script></head>'
+        "<body><h3>P1.3 in-page probe (debug)</h3>"
+        '<pre id="out">running...</pre>'
+        "<script>\n(async function () {\n"
+        "  const out = [];\n"
+        "  const say = (m) => { out.push(m);"
+        " document.getElementById('out').textContent = out.join('\\n'); };\n"
+        "  try {\n"
+        "    const pollResp = await fetch('/static/poll.js', { cache: 'no-store' });\n"
+        "    const pollBytes = new Uint8Array(await pollResp.arrayBuffer());\n"
+        "    const pollHash = [...new Uint8Array(await crypto.subtle.digest"
+        "('SHA-256', pollBytes))].map(b => b.toString(16).padStart(2, '0')).join('');\n"
+        "    const st = await (await fetch('/api/v2/debug/store-state?db=main')).json();\n"
+        "    const head = st.head || 0;\n"
+        "    const lr = await fetch('/api/v2/poll?streams=c_debug:' + head + '&wait=0');\n"
+        "    const liveness = lr.headers.get('X-Liveness-Path') || 'absent';\n"
+        "    const samples = [];\n"
+        "    const arrival = new Map();\n"
+        "    let misses = 0;\n"
+        "    const client = SiteCrewPoll.create({ baseUrl: '',"
+        " streams: { c_debug: head }, wait: 25,\n"
+        "      onEvents: (s, evs) => { for (const e of evs)"
+        " if (!arrival.has(e.seq)) arrival.set(e.seq, performance.now()); } });\n"
+        "    client.start();\n"
+        "    await new Promise(r => setTimeout(r, 300));\n"
+        "    const N = 200;\n"
+        "    for (let i = 0; i < N; i++) {\n"
+        "      await new Promise(r => setTimeout(r, 30 + Math.floor(Math.random() * 220)));\n"
+        "      const t0 = performance.now();\n"
+        "      let ack = null;\n"
+        "      try {\n"
+        "        const r = await fetch('/api/v2/debug/append', { method: 'POST',"
+        " headers: {'Content-Type': 'application/json'},"
+        " body: JSON.stringify({cycles: 1, db: 'main'}) });\n"
+        "        const j = await r.json();\n"
+        "        ack = (j.acks || [])[j.acks.length - 1] || null;\n"
+        "      } catch (e) { misses++; continue; }\n"
+        "      if (ack == null) { misses++; continue; }\n"
+        "      const deadline = t0 + 5000;\n"
+        "      while (!arrival.has(ack) && performance.now() < deadline)"
+        " await new Promise(r => setTimeout(r, 2));\n"
+        "      if (arrival.has(ack)) samples.push({ seq: ack,"
+        " ms: Math.round((arrival.get(ack) - t0) * 10) / 10 });\n"
+        "      else misses++;\n"
+        "    }\n"
+        "    client.stop();\n"
+        "    const lat = samples.map(s => s.ms).sort((a, b) => a - b);\n"
+        "    const pick = q => lat.length ?"
+        " lat[Math.min(lat.length - 1, Math.floor(q * lat.length))] : null;\n"
+        "    const results = { user_agent: navigator.userAgent,\n"
+        "      poll_js_sha256_page_fetched: pollHash,\n"
+        "      liveness_path_inpage: liveness,\n"
+        "      start_head: head, samples_requested: N,\n"
+        "      received: samples.length, misses: misses,\n"
+        "      p50_ms: pick(0.5), p95_ms: pick(0.95),\n"
+        "      max_ms: lat.length ? lat[lat.length - 1] : null,\n"
+        "      samples: samples,\n"
+        "      finished_at: new Date().toISOString() };\n"
+        "    window.__probeResults = results;\n"
+        "    await fetch('/api/v2/debug/probe-results', { method: 'POST',"
+        " headers: {'Content-Type': 'application/json'},"
+        " body: JSON.stringify(results) });\n"
+        "    say('DONE ' + JSON.stringify({ received: results.received,"
+        " misses: misses, p50: results.p50_ms, p95: results.p95_ms,"
+        " max: results.max_ms, liveness: liveness,"
+        " pollHash: pollHash.slice(0, 16) }));\n"
+        "  } catch (e) {\n"
+        "    say('ERROR ' + (e && e.message));\n"
+        "    window.__probeError = String(e && e.message);\n"
+        "  }\n"
+        "})();\n</script></body></html>"
+    )
+    return app.response_class(html, mimetype="text/html")
+
+
+@app.post("/api/v2/debug/probe-results")
+def debug_probe_results_post():
+    if not _store_enabled() or not _debug_enabled():
+        return jsonify({"error": "store/debug flag off"}), 404
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "bad_request"}), 400
+    _PROBE_RESULTS["results"] = body
+    return jsonify({"ok": True})
+
+
+@app.get("/api/v2/debug/probe-results")
+def debug_probe_results_get():
+    if not _store_enabled() or not _debug_enabled():
+        return jsonify({"error": "store/debug flag off"}), 404
+    return jsonify(_PROBE_RESULTS["results"] or {"empty": True})
+
+
 @app.get("/api/v2/debug/fts5-probe")
 def debug_fts5_probe():
     """FTS5 probe inside the app's own Python (blueprint §2.2, boss order step 4)."""
