@@ -49,7 +49,10 @@ def devices():
 
 def serial():
     """First usable device. devices() only returns rows in state "device",
-    so "unauthorized" and "offline" entries are skipped by construction."""
+    so "unauthorized" and "offline" entries are skipped by construction.
+    Boss P1.2-D ruling: the caller pins os.environ["ANDROID_SERIAL"] to this
+    value right after, so every adb() call targets the same device even when
+    two are attached."""
     devs = devices()
     return devs[0] if devs else None
 
@@ -101,30 +104,46 @@ def pid():
     return out.strip()
 
 
-def pid_alive(target_pid):
+def pids():
+    """All app pids as a list — p4a can run a :service subprocess, so pidof
+    may return more than one (boss P1.2-D hygiene ruling)."""
     out, _ = adb("shell", "pidof", PKG, timeout=15)
-    return bool(target_pid) and target_pid in out.split()
+    return [p for p in out.split() if p.isdigit()]
+
+
+def pid_alive(target_pid):
+    """target_pid may be one pid or a whitespace-separated list/set of pids:
+    alive iff ANY of them is still running (boss hygiene ruling — a plain
+    `target in out.split()` gave a false 'dead' for multi-pid apps)."""
+    want = set(str(target_pid or "").split())
+    if not want:
+        return False
+    out, _ = adb("shell", "pidof", PKG, timeout=15)
+    return bool(want & set(out.split()))
 
 
 def hard_kill_pid(target_pid=None):
     """Kill the app, escalating through methods that work on a standard
     (non-rooted) device; returns (method, exit_status).
 
-    Plain `adb shell kill -9` is usually DENIED on a non-rooted device (the
-    shell uid cannot signal an app uid), so: run-as kill -9 first (works on
-    debuggable builds), then am force-stop (always permitted), then plain
-    kill -9 (rooted devices). The caller asserts the pid is actually gone.
+    target_pid may be one pid or a list of pids (p4a :service subprocess —
+    boss hygiene ruling). Plain `adb shell kill -9` is usually DENIED on a
+    non-rooted device (the shell uid cannot signal an app uid), so: run-as
+    kill -9 first (works on debuggable builds), then am force-stop (always
+    permitted; an ActivityManager-issued SIGKILL, not a shell signal), then
+    plain kill -9 (rooted devices). The caller asserts the pids are gone.
     """
-    p = target_pid or pid()
-    if not p:
+    p = target_pid or pids()
+    plist = " ".join(p) if isinstance(p, (list, tuple)) else str(p or "")
+    if not plist.strip():
         return ("none", 0)
-    out, rc = adb("shell", "run-as", PKG, "kill", "-9", p, timeout=20)
-    if rc == 0 and not pid_alive(p):
+    out, rc = adb("shell", "run-as", PKG, "kill", "-9", *plist.split(), timeout=20)
+    if rc == 0 and not pid_alive(plist):
         return ("run-as-kill-9", rc)
     out2, rc2 = adb("shell", "am", "force-stop", PKG, timeout=20)
-    if not pid_alive(p):
+    if not pid_alive(plist):
         return ("am-force-stop", rc2)
-    out3, rc3 = adb("shell", "kill", "-9", p, timeout=20)
+    out3, rc3 = adb("shell", "kill", "-9", *plist.split(), timeout=20)
     return ("kill-9", rc3)          # caller asserts death via pid_alive()
 
 
@@ -133,15 +152,26 @@ def hard_kill():
 
 
 def getprops():
-    """Device facts for the report (recorded, never hardcoded)."""
+    """Device facts for the report (recorded, never hardcoded). Includes the
+    emulator probes the boss requires: ro.kernel.qemu, ro.boot.qemu,
+    ro.hardware (an emulator run is a rehearsal only; sign-off needs a
+    physical device)."""
     keys = {"ro.product.manufacturer": "manufacturer",
             "ro.product.model": "model",
             "ro.build.version.sdk": "sdk",
-            "ro.build.version.release": "release"}
+            "ro.build.version.release": "release",
+            "ro.kernel.qemu": "ro_kernel_qemu",
+            "ro.boot.qemu": "ro_boot_qemu",
+            "ro.hardware": "hardware"}
     props = {}
     for k, short in keys.items():
         out, _ = adb("shell", "getprop", k, timeout=15)
         props[short] = out.strip()
+    props["is_emulator"] = (
+        props.get("ro_kernel_qemu") == "1"
+        or props.get("ro_boot_qemu") == "1"
+        or props.get("hardware", "").lower() in ("goldfish", "ranchu",
+                                                 "vbox86", "vsoc"))
     return props
 
 

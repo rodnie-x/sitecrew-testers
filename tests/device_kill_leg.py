@@ -1,8 +1,11 @@
 """P1.2-D device kill leg — in-flight kills on ANY connected Android device.
 
 Device-agnostic (boss-approved intent): the device is the first `adb devices`
-entry in "device" state; no manufacturer/model/serial is hardcoded (the serial
-is RECORDED, not assumed); standard adb only; every fact comes from the device.
+entry in "device" state, pinned via ANDROID_SERIAL so every adb call targets
+it even with two devices attached; no manufacturer/model/serial is hardcoded
+(the serial is RECORDED, not assumed); standard adb only; every fact comes
+from the device. An emulator run is a REHEARSAL only (is_emulator recorded);
+sign-off needs a physical device.
 
 Per cycle (on the leg's OWN db: killtest.db — never sitecrew.db):
   1. adb logcat -c                          (fresh buffer: no stale ACKs)
@@ -15,24 +18,33 @@ Per cycle (on the leg's OWN db: killtest.db — never sitecrew.db):
         doing one unbuffered os.write of the seq to kill_acks.log
   5. when the k-th ACK of this cycle is observed (logcat = the TRIGGER only):
         HARD-KILL the app WHILE THE LOOP IS STILL RUNNING (no stop is sent)
-  6. verify the pid is gone; record kill method + exit status
-  7. relaunch, wait for the server, assert the new pid differs
+  6. verify every app pid is gone; record kill method + exit status
+  7. relaunch, wait for the server, assert the new pids differ
   8. per-cycle oracle (device's own SQLite, via the app's store-state):
         invariants all green AND last_acked <= head <= last_acked + 1
      where last_acked = the ACK SIDE FILE's last seq (page cache survives
      SIGKILL — boss amendment 1; logcat is only the trigger + a diagnostic)
      and unacked = head - last_acked is 0 or 1 per kill.
   9. continuity: before_head[c] == after_head[c-1] (boss amendment 3)
-Final pass (named keys, boss amendment 4):
+Final pass: named checks from the PURE evaluate_checks() (unit-tested on PC
+against real check_invariants output — boss fix 1):
   - integrity_check ok / foreign_key_check empty / both orphan counts 0 /
     seq contiguous per chat  (EventStore.check_invariants on the device DB)
   - head == initial_head + ack_file_lines_added + sum(unacked)
   - device store_modules_sha256 == the frozen hashes in p12_sha256s.txt
-  - server confirmed bound to 127.0.0.1 during the run (/proc/net/tcp)
+  - APK hashes recorded (adb-pulled pm path APKs, split-APK safe) and, when
+    reports/sitecrew-current.apk exists, matched to the build artifact
+  - end-of-run snapshot of the server's bind state: at least one :8080
+    listener across /proc/net/tcp AND /proc/net/tcp6, ALL of them on
+    loopback (a :: bind fails the check)
 Claims (boss amendment 5): the report states the run used a debug-flagged
 build, that on-device in-flight rollback is STATISTICAL (unacked-cycle count
-reported; deterministic coverage is owned by the PC injected modes), and the
-APK hashes come from adb-pulled pm path APKs (split-APK safe).
+reported; deterministic coverage is owned by the PC injected modes), and that
+launch() uses the packaging-specific Kivy activity (am start -n
+com.sitecrew.ai/org.kivy.android.PythonActivity).
+Rerun precondition (boss fix 4): abort at start unless ack_file.last_seq is
+None or initial_head - last_seq in (0, 1) — a stale side file against a fresh
+DB (or the reverse) otherwise fails cycle 0 with a bogus unacked.
 PASS needs all 30 cycles valid and every named check green.
 Evidence: tests/evidence/p12_device_report.json
 """
@@ -87,9 +99,9 @@ def dump_diagnostics(tag):
     out_dir = os.path.join(REPO, "tests", "evidence")
     os.makedirs(out_dir, exist_ok=True)
     try:
-        pid = adb_helpers.pid()
+        pids = adb_helpers.pids()
         with open(os.path.join(out_dir, tag + "_pidof.txt"), "w") as f:
-            f.write(pid or "NO PROCESS")
+            f.write(" ".join(pids) if pids else "NO PROCESS")
     except Exception as e:
         with open(os.path.join(out_dir, tag + "_pidof.txt"), "w") as f:
             f.write("error: %s" % e)
@@ -101,6 +113,29 @@ def dump_diagnostics(tag):
     except Exception as e:
         with open(os.path.join(out_dir, tag + "_logcat.txt"), "w") as f:
             f.write("logcat failed: %s" % e)
+
+
+def evaluate_checks(inv, invalid, final_head, initial_head, ack_lines_delta,
+                    unacked_sum, mod_checks, server_binds, apk_checks):
+    """Pure: a real check_invariants() block + counters -> the named checks
+    dict (boss fix 1). Unit-tested on PC against real output: our
+    check_invariants maps a passing integrity_check to [], NOT ["ok"]."""
+    return {
+        "all_cycles_valid": invalid == 0,
+        "invariants_pass": bool(inv.get("_pass")),
+        "integrity_check_ok": inv.get("integrity_check") == [],
+        "foreign_key_check_empty": inv.get("foreign_key_check") == [],
+        "message_orphans_zero": inv.get("message_links") == [],
+        "tool_orphans_zero": inv.get("tool_links") == [],
+        "seq_contiguous": inv.get("seq_contiguous") == [],
+        "identity_head_eq_acks_plus_unacked":
+            final_head == initial_head + ack_lines_delta + unacked_sum,
+        "store_module_hashes_match": all(mod_checks.values()),
+        "server_binds_127_0_0_1": bool(server_binds),
+        "apk_hashes_recorded": bool(apk_checks.get("apk_hashes_recorded")),
+        "apk_matches_build_artifact":
+            bool(apk_checks.get("apk_matches_build_artifact")),
+    }
 
 
 class LogcatStream:
@@ -177,7 +212,7 @@ def run_cycle(rng, serial, cycle, expected_before_head):
         while time.time() < deadline:
             line = stream.next_line(timeout=5)
             if line is None:
-                if not adb_helpers.pid_alive(adb_helpers.pid()):
+                if not adb_helpers.pid_alive(" ".join(adb_helpers.pids())):
                     break                     # process died: done streaming
                 continue
             m = ACK_RE.search(line)
@@ -185,9 +220,9 @@ def run_cycle(rng, serial, cycle, expected_before_head):
                 acks += 1
                 logcat_seqs.append(int(m.group(2)))
                 if acks >= k:
-                    pid = adb_helpers.pid()
-                    method, rc = adb_helpers.hard_kill_pid(pid)
-                    res["kill"] = {"method": method, "rc": rc, "pid": pid}
+                    pids = adb_helpers.pids()
+                    method, rc = adb_helpers.hard_kill_pid(pids)
+                    res["kill"] = {"method": method, "rc": rc, "pids": pids}
                     break
             if "SC_STORE_FLAT_DONE" in line:
                 flat_done_early = True        # loop ended before the kill
@@ -199,7 +234,7 @@ def run_cycle(rng, serial, cycle, expected_before_head):
         else:
             res["valid"] = False
             res["error"] = "degraded ACK wait: k=%d not seen in 120 s" % k
-            adb_helpers.hard_kill_pid(adb_helpers.pid())
+            adb_helpers.hard_kill_pid(adb_helpers.pids())
             return res
         if flat_done_early and res["kill"] is None:
             res["valid"] = False
@@ -211,7 +246,7 @@ def run_cycle(rng, serial, cycle, expected_before_head):
         while time.time() < drain_end:
             line = stream.next_line(timeout=1)
             if line is None:
-                if not adb_helpers.pid_alive(adb_helpers.pid()):
+                if not adb_helpers.pid_alive(" ".join(adb_helpers.pids())):
                     break
                 continue
             m = ACK_RE.search(line)
@@ -223,7 +258,7 @@ def run_cycle(rng, serial, cycle, expected_before_head):
         res["logcat_seqs"] = logcat_seqs      # diagnostic only (boss amendment 3)
         # crash-path guard (boss amendment 3): died on its own, never killed
         if res["kill"] is None:
-            if not adb_helpers.pid_alive(adb_helpers.pid()):
+            if not adb_helpers.pid_alive(" ".join(adb_helpers.pids())):
                 res["valid"] = False
                 res["error"] = ("process died on its own before the kill "
                                 "(acks=%d, last logcat seq=%s)"
@@ -233,9 +268,9 @@ def run_cycle(rng, serial, cycle, expected_before_head):
             res["valid"] = False
             res["error"] = "kill never issued and process still alive"
             return res
-        if adb_helpers.pid_alive(res["kill"]["pid"]):
+        if adb_helpers.pid_alive(" ".join(res["kill"]["pids"])):
             res["valid"] = False
-            res["error"] = "kill method %s left pid alive" % res["kill"]["method"]
+            res["error"] = "kill method %s left pids alive" % res["kill"]["method"]
             return res
         res["killed_in_flight"] = True        # kill landed while the loop ran
     finally:
@@ -247,11 +282,11 @@ def run_cycle(rng, serial, cycle, expected_before_head):
         res["error"] = "server did not return after relaunch"
         dump_diagnostics("cycle%d_boot_failure" % cycle)
         return res
-    new_pid = adb_helpers.pid()
-    res["new_pid"] = new_pid
-    if not new_pid or new_pid == res["kill"]["pid"]:
+    new_pids = adb_helpers.pids()
+    res["new_pids"] = new_pids
+    if not new_pids or set(new_pids) & set(res["kill"]["pids"]):
         res["valid"] = False
-        res["error"] = "pid did not change after relaunch"
+        res["error"] = "pids did not change after relaunch"
         return res
 
     # per-cycle oracle on the DEVICE's own SQLite (via the app's endpoint):
@@ -280,8 +315,9 @@ def run_cycle(rng, serial, cycle, expected_before_head):
 
 
 def pull_apk_hashes(out_dir):
-    """Boss amendment 4: hash the APK(s) actually installed (pm path + adb pull;
-    split-APK safe) — never a PC-side copy."""
+    """Boss amendment 4 + fix 2: hash the APK(s) actually installed (pm path +
+    adb pull; split-APK safe) — never a PC-side copy."""
+    os.makedirs(out_dir, exist_ok=True)   # boss fix 2: the dir never existed
     out, _ = adb_helpers.adb("shell", "pm", "path", PKG, timeout=15)
     device_paths = [l.split("package:", 1)[1].strip()
                     for l in out.splitlines() if l.startswith("package:")]
@@ -311,17 +347,24 @@ def frozen_hashes():
 
 
 def server_bind_evidence(serial):
-    """Boss amendment 5: confirm 127.0.0.1:8080 LISTEN during the run, from the
-    kernel's /proc/net/tcp (works on every Android; 8080 = hex 1F90,
-    127.0.0.1 = 0100007F)."""
-    out, _ = adb_helpers.adb("shell", "cat", "/proc/net/tcp", timeout=20)
-    rows = []
-    for line in out.splitlines()[1:]:
-        parts = line.split()
-        if len(parts) >= 4 and parts[3] == "0A" and parts[1].endswith(":1F90"):
-            rows.append({"local": parts[1], "state": parts[3]})
-    return {"port_hex": "1F90", "listeners": rows,
-            "binds_127_0_0_1": any(r["local"].startswith("0100007F:") for r in rows)}
+    """Boss fix 5: END-OF-RUN SNAPSHOT of the server's bind state (the
+    docstring previously said 'during the run' — it is a snapshot). At least
+    one :8080 listener across /proc/net/tcp AND /proc/net/tcp6, ALL of them
+    on loopback (a :: bind fails). 8080 = hex 1F90; 127.0.0.1 = 0100007F;
+    ::1 = 00000000000000000000000001000000."""
+    listeners = []
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        out, _ = adb_helpers.adb("shell", "cat", table, timeout=20)
+        for line in out.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 4 and parts[3] == "0A" and parts[1].endswith(":1F90"):
+                listeners.append({"table": table, "local": parts[1]})
+    def loopback(local):
+        addr = local.split(":")[0].upper()
+        return addr == "0100007F" or addr == "0" * 31 + "1"
+    return {"port_hex": "1F90", "listeners": listeners,
+            "all_listeners_loopback": bool(listeners) and all(
+                loopback(l["local"]) for l in listeners)}
 
 
 def collect_device_facts(serial):
@@ -351,6 +394,9 @@ def collect_device_facts(serial):
     except Exception as e:
         facts["store_state_facts_error"] = str(e)[:200]
     facts["server_bind"] = server_bind_evidence(serial)
+    facts["launch_method"] = ("am start -n %s/org.kivy.android.PythonActivity "
+                              "(packaging-specific, not OEM-specific)"
+                              % PKG)
     return facts
 
 
@@ -363,6 +409,7 @@ def main():
     if not serial:
         print(json.dumps({"pass": False, "error": "no adb device"}))
         return 1
+    os.environ["ANDROID_SERIAL"] = serial      # boss fix 3: pin the device
     adb_helpers.forward(18110)
     if not adb_helpers.wait_server(BASE, timeout=90):
         adb_helpers.launch()
@@ -375,6 +422,15 @@ def main():
     initial = http_retry("GET", "/api/v2/debug/store-state?db=kill")
     initial_head = initial.get("head", 0)
     initial_ack_lines = (initial.get("ack_file") or {}).get("lines") or 0
+    # boss fix 4: stale side file vs DB must abort BEFORE the run
+    last0 = (initial.get("ack_file") or {}).get("last_seq")
+    if last0 is not None and (initial_head - last0) not in (0, 1):
+        print(json.dumps({"pass": False,
+                          "error": "stale kill_acks.log vs killtest.db "
+                                   "(file last_seq=%s, head=%s) — clear the "
+                                   "app data (or delete kill_acks.log) and "
+                                   "rerun" % (last0, initial_head)}))
+        return 1
 
     log = []
     ev = os.path.join(REPO, "tests", "evidence")
@@ -434,37 +490,62 @@ def main():
         want = frozen.get(name)
         got = device_mods.get(name)
         mod_checks[name] = bool(want and got == want)
-    hashes_match = all(mod_checks.values())
 
-    # boss amendment 4: named checks, not only _pass
-    checks = {
-        "all_cycles_valid": invalid == 0,
-        "invariants_pass": bool(inv.get("_pass")),
-        "integrity_check_ok": inv.get("integrity_check") == [],
-        "foreign_key_check_empty": inv.get("foreign_key_check") == [],
-        "message_orphans_zero": inv.get("message_links") == [],
-        "tool_orphans_zero": inv.get("tool_links") == [],
-        "seq_contiguous": inv.get("seq_contiguous") == [],
-        "identity_head_eq_acks_plus_unacked":
-            final_head == initial_head + (final_ack_lines - initial_ack_lines)
-            + unacked_sum,
-        "store_module_hashes_match": hashes_match,
-        "server_binds_127_0_0_1":
-            bool((facts.get("server_bind") or {}).get("binds_127_0_0_1")),
+    # boss fix 2: enforceable APK evidence
+    pulled = facts.get("apk_hashes") or []
+    hex64 = re.compile(r"^[0-9a-f]{64}$")
+    apk_checks = {
+        "apk_hashes_recorded": bool(pulled) and all(
+            isinstance(p, dict) and "error" not in p
+            and hex64.match(p.get("sha256") or "") for p in pulled),
     }
+    artifact = os.path.join(REPO, "reports", "sitecrew-current.apk")
+    if os.path.exists(artifact):
+        ah = hashlib.sha256()
+        with open(artifact, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                ah.update(chunk)
+        apk_checks["apk_matches_build_artifact"] = any(
+            p.get("sha256") == ah.hexdigest() for p in pulled
+            if isinstance(p, dict))
+        facts["build_artifact_sha256"] = ah.hexdigest()
+    else:
+        apk_checks["apk_matches_build_artifact"] = False
+
+    checks = evaluate_checks(
+        inv, invalid, final_head, initial_head,
+        final_ack_lines - initial_ack_lines, unacked_sum, mod_checks,
+        (facts.get("server_bind") or {}).get("all_listeners_loopback"),
+        apk_checks)
+
+    kill_counts = {}
+    for r in log:
+        m = (r.get("kill") or {}).get("method")
+        if m:
+            kill_counts[m] = kill_counts.get(m, 0) + 1
+    deltas = [r["logcat_vs_file_delta"] for r in log
+              if r.get("logcat_vs_file_delta") is not None]
+
     report = {
         # boss amendment 5: constrained claims
         "build_flagging": "debug-flagged run (SITECREW_DEBUG on device)",
         "in_flight_note": ("on-device in-flight rollback is STATISTICAL; the "
                            "unacked-cycle count is reported and deterministic "
                            "coverage is owned by the PC injected modes"),
+        "kill_method_note": {"am-force-stop":
+                             "ActivityManager-issued SIGKILL, not a shell "
+                             "signal"},
+        "launch_method": facts.get("launch_method"),
         "pass": all(checks.values()),
         "checks": checks,
+        "apk_checks": apk_checks,
         "module_hash_checks": mod_checks,
         "seed": seed,
         "cycles": CYCLES,
         "invalid_cycles": invalid,
         "unacked_cycles": unacked_cycles,
+        "kill_method_counts": kill_counts,
+        "logcat_vs_file_deltas": deltas,
         "initial_head": initial_head,
         "final_head": final_head,
         "initial_ack_file_lines": initial_ack_lines,
@@ -479,7 +560,7 @@ def main():
         json.dump(report, f, indent=2)
     print(json.dumps({k: report[k] for k in
                       ("pass", "checks", "invalid_cycles", "unacked_cycles",
-                       "final_head")}, indent=2))
+                       "kill_method_counts", "final_head")}, indent=2))
     return 0 if report["pass"] else 1
 
 

@@ -1,0 +1,28 @@
+{
+  "invariants_block": {
+    "integrity_check": [],
+    "foreign_key_check": [],
+    "office_chat_id": [],
+    "seq_contiguous": [],
+    "message_links": [],
+    "tool_links": [],
+    "case_turn_agreement": [],
+    "unknown_event_types": [],
+    "_pass": true
+  },
+  "checks": {
+    "all_cycles_valid": true,
+    "invariants_pass": true,
+    "integrity_check_ok": true,
+    "foreign_key_check_empty": true,
+    "message_orphans_zero": true,
+    "tool_orphans_zero": true,
+    "seq_contiguous": true,
+    "identity_head_eq_acks_plus_unacked": true,
+    "store_module_hashes_match": true,
+    "server_binds_127_0_0_1": true,
+    "apk_hashes_recorded": true,
+    "apk_matches_build_artifact": true
+  },
+  "all_true": true
+}

@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 
+
+# pulled device APKs (P1.2-D evidence, boss fix 2)
+tests/evidence/apk_pull/

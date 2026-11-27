@@ -689,13 +689,20 @@ def debug_append():
                 except Exception as e:
                     print("SC_STORE_ERR %s" % str(e)[:120], flush=True)
                     break
-                # Boss amendment 1: unbuffered ACK side file (survives SIGKILL)
+                # Boss amendment 1 + hygiene ruling: unbuffered ACK side file
+                # (survives SIGKILL). A write error BREAKS the loop (a silent
+                # gap would only fail the identity later); the fd is closed in
+                # a finally.
+                fd = None
                 try:
                     fd = os.open(ACK_FILE, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
                     os.write(fd, ("%d\n" % env["seq"]).encode())
-                    os.close(fd)
                 except OSError as e:
                     print("SC_STORE_ACKFILE_ERR %s" % str(e)[:120], flush=True)
+                    break
+                finally:
+                    if fd is not None:
+                        os.close(fd)
                 print("SC_STORE_ACK %s %d" % (stream, env["seq"]), flush=True)
             _STORE["flat_running"] = False
             print("SC_STORE_FLAT_DONE", flush=True)
