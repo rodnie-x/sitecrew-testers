@@ -1,6 +1,6 @@
 1ea41d597213a45f29186740b2d763004edc0377da07810e1efc4c9633e2c9bc  tests/kill_driver.py  (boss driver (unchanged))
 2da9f2e1c01a32f32b19ca487dcd18b8eaa3145bb4df8dc078e33a1efd205884  tests/kill_writer.py  (boss writer (unchanged))
-97131bfb1807dc0771a22469313392b355f54c1cf18719b13f85b2a3d0facb49  tests/device_kill_leg.py  (RUN-READY: pure evaluate_checks, APK enforcement, ANDROID_SERIAL pin, rerun precondition, tightened bind check (tcp+tcp6, all-loopback), pid-set handling)
+627ba42bb7e767ef285ff127d855fb0073036e687eeed130d80a3e3b0e1c7058  tests/device_kill_leg.py  (RUN-READY: pure evaluate_checks, APK enforcement, ANDROID_SERIAL pin, rerun precondition, tightened bind check (tcp+tcp6, all-loopback), pid-set handling)
 3120a2ab0b9bac11e2c221e1be529e80943819ff532b77e490dd3e41e863ce97  scripts/android/adb_helpers.py  (RUN-READY: pids() list + set-aware pid_alive, emulator probes, multi-pid kill)
 f3bd9b1368b4dbc31694669f1395cd048b22905f91338daf9f000d1edefcde89  tests/migration_writer.py  (after-commit injection point)
 34f3c197f7bcbb1a1e71a1d39218110386eac4bb4faf122cd9610f0f72a7bcc6  tests/test_migration_kills.py  (45 random + 5 deterministic after-commit cycles)
@@ -11,3 +11,4 @@ a11cac6752d1607a20865d2a500987dd718097656b08aae293ef5a6546c37b18  sitecrew/api_v
 46e17f1bbe77ca62b62b5e4a0d23015e49e758c4511ba86d5f0f90afcd5d0d87  tests/p13_pc_run.py  (P1.3 PC orchestrator)
 cfbe9765f0894c3c5d2eb1bff833a57211de4bfdfd97e1e75c467f83edee4d19  tests/p13_client.cjs  (P1.3 PC client (real poll.js))
 43c3f17509c2abdfce50416dbe824581426ed1fc46afd81e98945fa8e42dc070  tests/test_poll_contract.py  (step-3b: gap re-poll + idempotent apply)
+370e234afe8cb9a5d974078f31f930775693fedd606fab2aa21e6eb91dbaad42  server/static/poll.js  (integrated poll client (the file the WebView loads))

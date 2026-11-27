@@ -119,7 +119,15 @@ def evaluate_checks(inv, invalid, final_head, initial_head, ack_lines_delta,
                     unacked_sum, mod_checks, server_binds, apk_checks):
     """Pure: a real check_invariants() block + counters -> the named checks
     dict (boss fix 1). Unit-tested on PC against real output: our
-    check_invariants maps a passing integrity_check to [], NOT ["ok"]."""
+    check_invariants maps a passing integrity_check to [], NOT ["ok"].
+
+    apk_checks carries: apk_hashes_recorded (bool, required in pass),
+    artifact_compared (bool), artifact_match (bool or None). TRI-STATE
+    (boss pre-run fix 1): when the build artifact is absent the match is
+    'not compared' and EXCLUDED from pass; when present it must match.
+    """
+    compared = bool(apk_checks.get("artifact_compared"))
+    match = apk_checks.get("artifact_match")
     return {
         "all_cycles_valid": invalid == 0,
         "invariants_pass": bool(inv.get("_pass")),
@@ -133,8 +141,7 @@ def evaluate_checks(inv, invalid, final_head, initial_head, ack_lines_delta,
         "store_module_hashes_match": all(mod_checks.values()),
         "server_binds_127_0_0_1": bool(server_binds),
         "apk_hashes_recorded": bool(apk_checks.get("apk_hashes_recorded")),
-        "apk_matches_build_artifact":
-            bool(apk_checks.get("apk_matches_build_artifact")),
+        "apk_matches_build_artifact": (not compared) or bool(match),
     }
 
 
@@ -272,6 +279,16 @@ def run_cycle(rng, serial, cycle, expected_before_head):
             res["valid"] = False
             res["error"] = "kill method %s left pids alive" % res["kill"]["method"]
             return res
+        # boss pre-run fix 2: a "none" kill (pidof empty at kill time — e.g.
+        # the app crashed right after the k-th ACK) must NOT count as a valid
+        # cycle: empty pid sets never intersect, so death would look verified
+        # with no kill ever issued.
+        if res["kill"]["method"] == "none" or not res["kill"]["pids"]:
+            res["valid"] = False
+            res["error"] = ("kill resolved to 'none' (no pid at kill time) — "
+                            "the app died right after the k-th ACK; not a "
+                            "verified in-flight kill")
+            return res
         res["killed_in_flight"] = True        # kill landed while the loop ran
     finally:
         stream.stop()
@@ -350,8 +367,10 @@ def server_bind_evidence(serial):
     """Boss fix 5: END-OF-RUN SNAPSHOT of the server's bind state (the
     docstring previously said 'during the run' — it is a snapshot). At least
     one :8080 listener across /proc/net/tcp AND /proc/net/tcp6, ALL of them
-    on loopback (a :: bind fails). 8080 = hex 1F90; 127.0.0.1 = 0100007F;
-    ::1 = 00000000000000000000000001000000."""
+    on loopback (a :: bind fails). 8080 = hex 1F90. Loopback forms, exactly
+    as /proc/net prints them (boss pre-run fix 3): IPv4 0100007F, IPv6 ::1
+    printed as 00000000000000000000000001000000 ("0"*24 + "01000000"), and
+    IPv4-mapped ::ffff:127.0.0.1 printed as 0000000000000000FFFF00000100007F."""
     listeners = []
     for table in ("/proc/net/tcp", "/proc/net/tcp6"):
         out, _ = adb_helpers.adb("shell", "cat", table, timeout=20)
@@ -361,7 +380,9 @@ def server_bind_evidence(serial):
                 listeners.append({"table": table, "local": parts[1]})
     def loopback(local):
         addr = local.split(":")[0].upper()
-        return addr == "0100007F" or addr == "0" * 31 + "1"
+        return (addr == "0100007F"                       # 127.0.0.1 (IPv4)
+                or addr == "0" * 24 + "01000000"         # ::1 as tcp6 prints it
+                or addr == "0" * 8 + "FFFF00000100007F")  # ::ffff:127.0.0.1
     return {"port_hex": "1F90", "listeners": listeners,
             "all_listeners_loopback": bool(listeners) and all(
                 loopback(l["local"]) for l in listeners)}
@@ -419,7 +440,21 @@ def main():
                               "error": "server unreachable after launch"}))
             return 1
 
-    initial = http_retry("GET", "/api/v2/debug/store-state?db=kill")
+    try:
+        initial = http_retry("GET", "/api/v2/debug/store-state?db=kill")
+    except Exception as e:
+        # boss optional preflight: a 404 here means the debug flag is off on
+        # the device — abort cleanly instead of a traceback
+        status = getattr(e, "code", None)
+        if status == 404:
+            print(json.dumps({"pass": False,
+                              "error": "store-state 404: the debug flag is "
+                                       "off on the device — touch SITECREW_"
+                                       "STORE and SITECREW_DEBUG markers in "
+                                       "the app's BASE_DIR and restart the "
+                                       "app"}))
+            return 1
+        raise
     initial_head = initial.get("head", 0)
     initial_ack_lines = (initial.get("ack_file") or {}).get("lines") or 0
     # boss fix 4: stale side file vs DB must abort BEFORE the run
@@ -491,26 +526,30 @@ def main():
         got = device_mods.get(name)
         mod_checks[name] = bool(want and got == want)
 
-    # boss fix 2: enforceable APK evidence
+    # boss pre-run fix 1: TRI-STATE APK evidence
     pulled = facts.get("apk_hashes") or []
     hex64 = re.compile(r"^[0-9a-f]{64}$")
-    apk_checks = {
-        "apk_hashes_recorded": bool(pulled) and all(
-            isinstance(p, dict) and "error" not in p
-            and hex64.match(p.get("sha256") or "") for p in pulled),
-    }
+    apk_hashes_recorded = bool(pulled) and all(
+        isinstance(p, dict) and "error" not in p
+        and hex64.match(p.get("sha256") or "") for p in pulled)
     artifact = os.path.join(REPO, "reports", "sitecrew-current.apk")
-    if os.path.exists(artifact):
+    artifact_compared = os.path.exists(artifact)
+    artifact_match = None
+    if artifact_compared:
         ah = hashlib.sha256()
         with open(artifact, "rb") as f:
             for chunk in iter(lambda: f.read(1 << 20), b""):
                 ah.update(chunk)
-        apk_checks["apk_matches_build_artifact"] = any(
-            p.get("sha256") == ah.hexdigest() for p in pulled
-            if isinstance(p, dict))
+        artifact_match = any(p.get("sha256") == ah.hexdigest() for p in pulled
+                             if isinstance(p, dict))
         facts["build_artifact_sha256"] = ah.hexdigest()
-    else:
-        apk_checks["apk_matches_build_artifact"] = False
+    apk_checks = {
+        "apk_hashes_recorded": apk_hashes_recorded,
+        "artifact_compared": artifact_compared,
+        "artifact_match": artifact_match,
+        "artifact_state": ("compared" if artifact_compared
+                           else "not compared (build artifact absent on PC)"),
+    }
 
     checks = evaluate_checks(
         inv, invalid, final_head, initial_head,
@@ -536,6 +575,11 @@ def main():
                              "ActivityManager-issued SIGKILL, not a shell "
                              "signal"},
         "launch_method": facts.get("launch_method"),
+        # boss pre-run fix 4: the emulator rule, stated in the report
+        "sign_off_eligible": not facts.get("is_emulator", False),
+        "sign_off_note": ("sign_off_eligible = not is_emulator; a PASS on an "
+                          "emulator is a rehearsal, not sign-off — sign-off "
+                          "needs a physical device"),
         "pass": all(checks.values()),
         "checks": checks,
         "apk_checks": apk_checks,

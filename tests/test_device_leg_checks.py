@@ -99,7 +99,8 @@ class EvaluateChecksAgainstRealOutput(unittest.TestCase):
             bad_inv, invalid=2, final_head=9, initial_head=0,
             ack_lines_delta=5, unacked_sum=1, mod_checks={"a.py": False},
             server_binds=False, apk_checks={"apk_hashes_recorded": False,
-                                            "apk_matches_build_artifact": False})
+                                            "artifact_compared": True,
+                                            "artifact_match": False})
         falsy = [k for k, v in checks.items() if not v]
         self.assertEqual(sorted(falsy), sorted([
             "all_cycles_valid", "invariants_pass", "integrity_check_ok",
@@ -108,6 +109,39 @@ class EvaluateChecksAgainstRealOutput(unittest.TestCase):
             "identity_head_eq_acks_plus_unacked",
             "store_module_hashes_match", "server_binds_127_0_0_1",
             "apk_hashes_recorded", "apk_matches_build_artifact"]))
+
+    def test_apk_tri_state(self):
+        """Boss pre-run fix 1: the artifact match is TRI-STATE.
+        - artifact absent -> 'not compared', EXCLUDED from pass
+        - artifact present -> must match (mismatch fails pass)
+        """
+        green_inv = {"_pass": True, "integrity_check": [],
+                     "foreign_key_check": [], "message_links": [],
+                     "tool_links": [], "seq_contiguous": []}
+        ok = {"apk_hashes_recorded": True, "artifact_compared": False,
+              "artifact_match": None}
+        absent = _leg.evaluate_checks(green_inv, 0, 10, 0, 10, 0,
+                                      {"a.py": True}, True, ok)
+        self.assertTrue(absent["apk_matches_build_artifact"])
+        self.assertTrue(all(absent.values()))  # absence no longer fails pass
+
+        present_match = dict(ok, artifact_compared=True, artifact_match=True)
+        matched = _leg.evaluate_checks(green_inv, 0, 10, 0, 10, 0,
+                                       {"a.py": True}, True, present_match)
+        self.assertTrue(matched["apk_matches_build_artifact"])
+
+        present_mismatch = dict(ok, artifact_compared=True, artifact_match=False)
+        mismatched = _leg.evaluate_checks(green_inv, 0, 10, 0, 10, 0,
+                                          {"a.py": True}, True,
+                                          present_mismatch)
+        self.assertFalse(mismatched["apk_matches_build_artifact"])
+        self.assertFalse(all(mismatched.values()))
+
+        # hashes must still be recorded regardless of the tri-state
+        no_hashes = dict(present_match, apk_hashes_recorded=False)
+        failing = _leg.evaluate_checks(green_inv, 0, 10, 0, 10, 0,
+                                       {"a.py": True}, True, no_hashes)
+        self.assertFalse(all(failing.values()))
 
 
 if __name__ == "__main__":
