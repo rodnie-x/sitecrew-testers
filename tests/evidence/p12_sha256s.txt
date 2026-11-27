@@ -1,2 +1,10 @@
-kill_driver.py  sha256=1ea41d597213a45f29186740b2d763004edc0377da07810e1efc4c9633e2c9bc
-kill_writer.py sha256=2da9f2e1c01a32f32b19ca487dcd18b8eaa3145bb4df8dc078e33a1efd205884
+1ea41d597213a45f29186740b2d763004edc0377da07810e1efc4c9633e2c9bc  tests/kill_driver.py  (boss driver (unchanged))
+2da9f2e1c01a32f32b19ca487dcd18b8eaa3145bb4df8dc078e33a1efd205884  tests/kill_writer.py  (boss writer (unchanged))
+7d923a3c1e2eb5ba30a8b6ff655aa5811cd61c34b5c362e52de9251a93ef719e  tests/device_kill_leg.py  (REVISED device leg (in-flight kills, streaming logcat, oracle))
+14ec071d8adc011f189c558b30818db0548a4b445bb9464bfe63c02cc72b2b0e  scripts/android/adb_helpers.py  (REVISED: kill-method fallback, pid_alive, getprops, package_info)
+f3bd9b1368b4dbc31694669f1395cd048b22905f91338daf9f000d1edefcde89  tests/migration_writer.py  (REVISED: after-commit injection point)
+34f3c197f7bcbb1a1e71a1d39218110386eac4bb4faf122cd9610f0f72a7bcc6  tests/test_migration_kills.py  (REVISED: 45 random + 5 deterministic after-commit cycles)
+00dda1cc29bcbc9cf62b80b80e24985e4387a6040402200d10602a10b96efcd5  server/app.py  (REVISED: debug gating + store-state device facts)
+1d8c925417fd70faa427474e31e9cb31a42bde06e64e5b737729a51abb72e547  sitecrew/store/db.py  (FROZEN store module)
+f2a9716d658e515ba677d9e0425e384ebe61efc6ddc3461e3f21a88a4591e715  sitecrew/store/events.py  (FROZEN store module)
+a11cac6752d1607a20865d2a500987dd718097656b08aae293ef5a6546c37b18  sitecrew/api_v2.py  (FROZEN poll blueprint)

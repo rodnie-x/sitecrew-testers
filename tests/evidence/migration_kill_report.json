@@ -1,303 +1,353 @@
 {
-  "seed": 732296211,
+  "seed": 1857457368,
   "cycles": 50,
   "results": [
     {
       "cycle": 0,
-      "version": 0,
+      "mode": "after",
+      "version": 2,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 1,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 2,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 3,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 4,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 5,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 6,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 7,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 8,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 9,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 10,
-      "version": 0,
+      "mode": "after",
+      "version": 2,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 11,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 12,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 13,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 14,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 15,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 16,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 17,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 18,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 19,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 20,
-      "version": 0,
+      "mode": "after",
+      "version": 2,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 21,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 22,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 23,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 24,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 25,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 26,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 27,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 28,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 29,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 30,
-      "version": 0,
+      "mode": "after",
+      "version": 2,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 31,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 32,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 33,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 34,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 35,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 36,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 37,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 38,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 39,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 40,
-      "version": 0,
+      "mode": "after",
+      "version": 2,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 41,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 42,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 43,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 44,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 45,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 46,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 47,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 48,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true
     },
     {
       "cycle": 49,
+      "mode": "random",
       "version": 0,
       "integrity": "ok",
       "ok": true

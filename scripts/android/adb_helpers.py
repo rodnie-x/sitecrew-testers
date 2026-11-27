@@ -13,6 +13,7 @@ CLI examples:
   python scripts/android/adb_helpers.py forward 18110
 """
 import os
+import re
 import subprocess
 import sys
 import time
@@ -27,16 +28,7 @@ _DEFAULT_ADB = os.path.join(os.path.dirname(_REPO), ".tooling", "android-sdk",
 
 
 def adb_path():
-    env = os.environ.get("SC_ADB")
-    if env:
-        return env
-    try:
-        from shutil import which
-        if which("adb"):
-            return "adb"                     # CI/Linux: adb on PATH
-    except Exception:
-        pass
-    return _DEFAULT_ADB
+    return os.environ.get("SC_ADB") or _DEFAULT_ADB
 
 
 def adb(*args, timeout=30):
@@ -56,6 +48,8 @@ def devices():
 
 
 def serial():
+    """First usable device. devices() only returns rows in state "device",
+    so "unauthorized" and "offline" entries are skipped by construction."""
     devs = devices()
     return devs[0] if devs else None
 
@@ -107,9 +101,63 @@ def pid():
     return out.strip()
 
 
+def pid_alive(target_pid):
+    out, _ = adb("shell", "pidof", PKG, timeout=15)
+    return bool(target_pid) and target_pid in out.split()
+
+
+def hard_kill_pid(target_pid=None):
+    """Kill the app, escalating through methods that work on a standard
+    (non-rooted) device; returns (method, exit_status).
+
+    Plain `adb shell kill -9` is usually DENIED on a non-rooted device (the
+    shell uid cannot signal an app uid), so: run-as kill -9 first (works on
+    debuggable builds), then am force-stop (always permitted), then plain
+    kill -9 (rooted devices). The caller asserts the pid is actually gone.
+    """
+    p = target_pid or pid()
+    if not p:
+        return ("none", 0)
+    out, rc = adb("shell", "run-as", PKG, "kill", "-9", p, timeout=20)
+    if rc == 0 and not pid_alive(p):
+        return ("run-as-kill-9", rc)
+    out2, rc2 = adb("shell", "am", "force-stop", PKG, timeout=20)
+    if not pid_alive(p):
+        return ("am-force-stop", rc2)
+    out3, rc3 = adb("shell", "kill", "-9", p, timeout=20)
+    return ("kill-9", rc3)          # caller asserts death via pid_alive()
+
+
 def hard_kill():
-    p = pid()
-    return adb("shell", "kill", "-9", p) if p else ("", 0)
+    return hard_kill_pid(pid())
+
+
+def getprops():
+    """Device facts for the report (recorded, never hardcoded)."""
+    keys = {"ro.product.manufacturer": "manufacturer",
+            "ro.product.model": "model",
+            "ro.build.version.sdk": "sdk",
+            "ro.build.version.release": "release"}
+    props = {}
+    for k, short in keys.items():
+        out, _ = adb("shell", "getprop", k, timeout=15)
+        props[short] = out.strip()
+    return props
+
+
+def package_info():
+    """Installed APK versionName + path (from the device, not assumptions)."""
+    info = {}
+    out, _ = adb("shell", "dumpsys", "package", PKG, timeout=30)
+    m = re.search(r"versionName=(\S+)", out)
+    if m:
+        info["versionName"] = m.group(1)
+    out2, _ = adb("shell", "pm", "path", PKG, timeout=15)
+    for line in out2.splitlines():
+        if line.startswith("package:"):
+            info["apk_path"] = line.split("package:", 1)[1].strip()
+            break
+    return info
 
 
 def trim_memory():
