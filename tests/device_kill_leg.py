@@ -1,4 +1,8 @@
-"""P1.2-D device kill leg — 20 kill/restart cycles on the real phone (boss order).
+"""P1.2-D device kill leg — 20 kill/restart cycles on ANY connected Android device.
+
+Device-agnostic: works on any manufacturer (TECNO, Samsung, Pixel, Xiaomi...),
+any Android version the app supports (API 24+), any screen size. The device is
+whatever adb reports first; no manufacturer or model is hardcoded.
 
 Per cycle:
   1. POST /api/v2/debug/append {cycles: 2..4}  (debug append loop in the app)
