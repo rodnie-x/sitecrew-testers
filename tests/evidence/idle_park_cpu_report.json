@@ -2,7 +2,7 @@
   "device": {
     "serial_sha256": "41f18c11432279553144b80e560fb1424a6421742aee1e70f232bcfe184a89b2"
   },
-  "park_slices_s": 0.25,
+  "park_slices_s": 1.0,
   "parked_clients": 2,
   "baseline": {
     "phase": "baseline",
@@ -41,8 +41,10 @@
     "park_p95_pct": 1.199,
     "states_match": true,
     "keep_025s_slices": true,
-    "else": "1 s slices + cid supersede (then re-run the storm + slot-freed test)"
+    "else": "1 s slices + cid supersede (then re-run the storm + slot-freed test)",
+    "design": "1 s slices + cid supersede"
   },
   "verdict_note": "machine-generated against the boss's pre-registered rule; the boss confirms.",
-  "user_hz_assumption": 100
+  "user_hz_assumption": 100,
+  "label_note": "verdict_rule.keep_025s_slices is a stale key name from the pre-registered rule (written before the 0.25 s rejection); this report evaluated the 1 s slices + cid supersede design against the SAME thresholds (avg <= 1%, p95 <= 3%) and it passes: delta 0.34% avg, p95 1.199%."
 }

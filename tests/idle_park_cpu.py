@@ -173,7 +173,7 @@ def main():
         "avg_delta_pct": round(delta_avg, 2),
         "park_p95_pct": park.get("cpu_pct_p95"),
         "states_match": states_match,
-        "keep_025s_slices": (delta_avg <= 1.0
+        "slices_pass_cpu_rule": (delta_avg <= 1.0
                              and (park.get("cpu_pct_p95") or 99) <= 3.0
                              and states_match),
         "else": "1 s slices + cid supersede (then re-run the storm + slot-freed test)",
