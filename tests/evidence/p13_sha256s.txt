@@ -4,7 +4,7 @@ b84ab98ec8bf2e7e82afc91de12b9f4d9758011a241aff31ea40272ea1e8ad62  sitecrew/api_v
 0b8554f5ce1818f79e7c5551bfb9102ce997fdbca4a4a6c89a498a52244d8425  server/static/poll.js  (integrated poll client (the file the WebView loads))
 1d8c925417fd70faa427474e31e9cb31a42bde06e64e5b737729a51abb72e547  sitecrew/store/db.py  (FROZEN store module)
 f2a9716d658e515ba677d9e0425e384ebe61efc6ddc3461e3f21a88a4591e715  sitecrew/store/events.py  (FROZEN store module)
-e97c73e6a5063e45f5d4ea2d22beb745130b0d72fd8cefcd392f2fc231294603  server/app.py  (server (debug gating, ACK side file, facts))
+28e54b9b6a1b68ce27a90fca621beef0a8bc3fff61bbe3bf192c9c14518a630c  server/app.py  (server (debug gating, ACK side file, facts))
 257f52ab1a1be9f7ed244b37800ee0b01992b2d442525398b2a55ca24c1872bb  tests/p13_pc_run.py  (P1.3 PC orchestrator)
 dd2dfd10a8bfd1a93d03028b0caf4b03edda12ea5e55791f99527abc771bb9ab  tests/p13_client.cjs  (P1.3 PC client (latency/reconnect/storm modes))
 2d572539eaf287b6713337dcc12d624405084f3dc656cd3213f8192214b668f7  tests/p13_storm_run.py  (PC storm run)
