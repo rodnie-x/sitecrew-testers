@@ -156,10 +156,90 @@ async function reconnect() {
   process.exit(out.pass ? 0 : 1);
 }
 
+async function storm() {
+  // Boss P1.3-device ruling, tested on PC FIRST: run the forced-reconnect
+  // storm at PRODUCTION wait=25. Risk: an aborted parked request keeps its
+  // parked slot until the park expires (up to 25 s), so a client coming back
+  // from a network drop could see 503 busy for up to 25 s — blowing the
+  // latency gate exactly when it matters. Metrics: 503 counts, longest 503
+  // window, and time-to-first-event after each reconnect.
+  let status503 = 0, other4xx5xx = 0, ok200 = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const r = await realFetch(url, opts);
+    if (r.status === 503) { status503++; last503at = Date.now(); cur503run++; }
+    else if (r.status >= 400) other4xx5xx++;
+    else ok200++;
+    return r;
+  };
+
+  const st = await api("/api/v2/debug/store-state?db=main");
+  const cursor0 = st.head || 0;
+  const chaosState = { streams: {} };
+  let lastForced = 0, lastAbortAt = null;
+  const ttfs = [];
+  let appliedTotal = 0;
+  const chaos = P.create({
+    baseUrl: base,
+    streams: { [stream]: cursor0 }, wait: 25,
+    chaos: { p: 0.95, maxMs: 400 },
+    onEvents: (sName, evs) => {
+      evs.forEach((e) => P.reduceEvent(chaosState, e));
+      appliedTotal += evs.length;
+      if (lastAbortAt != null) { ttfs.push(Date.now() - lastAbortAt); lastAbortAt = null; }
+    },
+  });
+  chaos.start();
+
+  const t0 = Date.now();
+  const DURATION = 90000;
+  let appended = 0;
+  let longest503run = 0, cur503run = 0, runStart = null, longest503ms = 0;
+  let last503at = null;
+  const t503 = setInterval(() => {
+    // sample forced-abort counter to timestamp reconnects
+    if (chaos.stats.forced > lastForced) { lastForced = chaos.stats.forced; lastAbortAt = Date.now(); }
+    if (last503at != null && Date.now() - last503at > 1500) {
+      if (cur503run > longest503run) longest503run = cur503run;
+      cur503run = 0; last503at = null;
+    }
+    if (Date.now() - t0 > DURATION) {
+      clearInterval(t503);
+      chaos.stop();
+      const sorted = ttfs.slice().sort((a, b) => a - b);
+      const out = {
+        mode: "storm", wait_used: 25, duration_s: Math.round((Date.now() - t0) / 1000),
+        forced_reconnects: chaos.stats.forced,
+        polls: chaos.stats.polls, errors: chaos.stats.errors,
+        http_503: status503, http_other_4xx5xx: other4xx5xx, http_2xx: ok200,
+        events_appended: appended, events_applied: appliedTotal,
+        longest_consecutive_503: longest503run || cur503run,
+        time_to_first_event_after_reconnect_ms: {
+          n: ttfs.length,
+          p50: sorted.length ? sorted[Math.floor(sorted.length * 0.5)] : null,
+          max: sorted.length ? sorted[sorted.length - 1] : null,
+        },
+        verdict_note: "slots_free_promptly = http_503 == 0; else the parked-slot hold is confirmed on PC and api_v2.py must change (freeze reopening, boss decision).",
+      };
+      console.log(JSON.stringify(out));
+      process.exit(0);
+    }
+  }, 50);
+
+  while (Date.now() - t0 < DURATION - 2000) {
+    try {
+      const r = await api("/api/v2/debug/append", { cycles: 1, db: "main" });
+      appended += (r.acks || []).length;
+    } catch (e) { /* keep the storm going */ }
+    await sleep(2000);
+  }
+}
+
 (async () => {
   try {
     if (mode === "latency") await latency();
     else if (mode === "reconnect") await reconnect();
+    else if (mode === "storm") await storm();
     else { console.error("unknown mode " + mode); process.exit(2); }
   } catch (e) {
     console.error("FATAL", e && e.message);

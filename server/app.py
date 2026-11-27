@@ -805,7 +805,7 @@ def debug_store_state():
     }
     mods = {}
     for name in ("sitecrew/store/db.py", "sitecrew/store/events.py",
-                 "sitecrew/api_v2.py"):
+                 "sitecrew/api_v2.py", "server/app.py", "server/static/poll.js"):
         p = os.path.join(BASE_DIR, name.replace("/", os.sep))
         try:
             with open(p, "rb") as f:

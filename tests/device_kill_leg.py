@@ -517,11 +517,13 @@ def main():
 
     facts = collect_device_facts(serial)
 
-    # boss amendment 4: device store module hashes must equal the frozen ones
+    # boss amendment 4 + traceability ruling: device hashes must equal the
+    # frozen ones — store modules AND the app-side files that carry the flat
+    # loop (server/app.py) and the client (server/static/poll.js)
     frozen = frozen_hashes()
     mod_checks = {}
     for name in ("sitecrew/store/db.py", "sitecrew/store/events.py",
-                 "sitecrew/api_v2.py"):
+                 "sitecrew/api_v2.py", "server/app.py", "server/static/poll.js"):
         want = frozen.get(name)
         got = device_mods.get(name)
         mod_checks[name] = bool(want and got == want)

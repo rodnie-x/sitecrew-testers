@@ -55,7 +55,6 @@
   "annotations": {
     "hash_kind": "render-state hash: the FNV hash of the reduceEvent state (items+seq per stream), not a live DOM \u2014 node has no DOM. Same events in -> same hash out. The device half must use a real WebView/DOM check to meet the gate wording.",
     "chaos_errors": "2 non-forced client-side failures (transient; each retried with backoff and succeeded). Expected under load: the two clients and the appender race the parked-slot semaphore (503 busy) and the local connection can reset during abort storms. No data impact: 0 dupes, 0 gaps, identical hashes and cursors.",
-    "commit_note": "commit 6a367ce43fb2 is the last PUSHED commit of sitecrew-ai; the working tree intentionally carries uncommitted work (owner no-commit rule). The evidence + harness SHAs of record live in the sitecrew-testers repo (8e912a6 and later).",
-    "accepted_by_boss": "P1.3 PC half accepted as the PC half PASS; the device half carries the final P1.3 verdict (p95 <= 300 ms, 0 misses, max reported)."
+    "commit_note": "commit 6a367ce43fb2 is the last PUSHED commit of sitecrew-ai; the working tree intentionally carries uncommitted work (owner no-commit rule). The evidence + harness SHAs of record live in the sitecrew-testers repo (8e912a6 and later)."
   }
 }
