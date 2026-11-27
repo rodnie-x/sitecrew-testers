@@ -1,0 +1,48 @@
+{
+  "device": {
+    "serial_sha256": "41f18c11432279553144b80e560fb1424a6421742aee1e70f232bcfe184a89b2"
+  },
+  "park_slices_s": 0.25,
+  "parked_clients": 2,
+  "baseline": {
+    "phase": "baseline",
+    "wall_s": 180,
+    "cpu_pct_avg": 3.122,
+    "cpu_pct_p95": 3.605,
+    "intervals": 36,
+    "state": {
+      "charging_usb": "true",
+      "charging_ac": "false",
+      "level": "100",
+      "status": "2",
+      "wakefulness": "Awake",
+      "thermal_hint": "unavailable"
+    },
+    "error": null
+  },
+  "park": {
+    "phase": "park",
+    "wall_s": 600,
+    "cpu_pct_avg": 67.037,
+    "cpu_pct_p95": 71.805,
+    "intervals": 120,
+    "state": {
+      "charging_usb": "true",
+      "charging_ac": "false",
+      "level": "100",
+      "status": "2",
+      "wakefulness": "Awake",
+      "thermal_hint": "unavailable"
+    },
+    "error": null
+  },
+  "verdict_rule": {
+    "avg_delta_pct": 63.92,
+    "park_p95_pct": 71.805,
+    "states_match": true,
+    "keep_025s_slices": false,
+    "else": "1 s slices + cid supersede (then re-run the storm + slot-freed test)"
+  },
+  "verdict_note": "machine-generated against the boss's pre-registered rule; the boss confirms.",
+  "user_hz_assumption": 100
+}

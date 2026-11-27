@@ -835,6 +835,23 @@ def debug_store_state():
                     "error": _STORE["error"], **facts})
 
 
+@app.get("/api/v2/debug/proc-stat")
+def debug_proc_stat():
+    """The server process's own /proc/self/stat (utime+stime ticks) for the
+    P1.3 idle-park CPU measurement. Self-reads are always allowed — run-as
+    reads of /proc/<pid>/stat are DENIED on Android 14 (measured)."""
+    if not _store_enabled() or not _debug_enabled():
+        return jsonify({"error": "store/debug flag off"}), 404
+    try:
+        with open("/proc/self/stat", "rb") as f:
+            raw = f.read().decode("utf-8", "replace")
+        fields = raw.rsplit(")", 1)[1].split()
+        return jsonify({"utime": int(fields[11]), "stime": int(fields[12]),
+                        "state": fields[0], "pid": os.getpid()})
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 500
+
+
 @app.get("/api/v2/debug/fts5-probe")
 def debug_fts5_probe():
     """FTS5 probe inside the app's own Python (blueprint §2.2, boss order step 4)."""

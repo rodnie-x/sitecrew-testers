@@ -25,7 +25,7 @@ log = logging.getLogger("sitecrew.api_v2")
 _STREAM_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")      # 'office' matches; ':' and ',' can never appear
 MAX_STREAMS = 32
 MAX_WAIT = 25.0
-PARK_SLICE_S = 0.25                                    # boss P1.3 ruling: park in slices, keep the slot (0.25 s -> storm 503s reach 0)
+PARK_SLICE_S = 1.0                                     # boss ruling after the phone CPU measurement: 0.25 s slices burned ~64% of a core on the device -> 1 s slices + cid supersede
 
 
 def parse_streams(raw):
@@ -94,6 +94,14 @@ def make_blueprint(get_store, max_parked=8):
     slots = threading.BoundedSemaphore(max_parked)      # parked long-polls can't exhaust the thread pool
     test_report = {}
 
+    # cid supersede (boss design): a reconnecting client presents the same cid;
+    # its NEW poll bumps the generation, and the OLD parked poll returns at its
+    # next slice boundary — the slot frees within ~1 slice without waiting for
+    # the full park. Cheap: a dict lookup per slice, no per-slice syscalls.
+    _supersede = {}
+    _sup_lock = threading.Lock()
+    _SUP_MAX = 256                                      # bound the registry (LRU-ish by insertion)
+
 
     def reply(obj, status=200, retry_after=None, liveness_path=None):
         resp = jsonify(obj)
@@ -114,12 +122,24 @@ def make_blueprint(get_store, max_parked=8):
             return reply({"error": "bad_request", "detail": str(e)}, 400)
         if not slots.acquire(blocking=False):
             return reply({"error": "busy"}, 503, retry_after=1)
+        # cid supersede: bump my generation BEFORE parking so any older poll
+        # with the same cid returns at its next slice boundary
+        cid = request.args.get("cid") or ""
+        my_gen = None
+        if cid and _STREAM_ID.match(cid):
+            with _sup_lock:
+                my_gen = _supersede.get(cid, 0) + 1
+                _supersede[cid] = my_gen
+                if len(_supersede) > _SUP_MAX:
+                    for k in list(_supersede)[:len(_supersede) - _SUP_MAX]:
+                        _supersede.pop(k, None)
         try:
             # Boss P1.3 ruling: hold the slot across PARK_SLICE_S slices and
-            # check client liveness between slices. A client that disconnects
-            # mid-park frees its slot within ~1 slice instead of holding it
-            # for the full wait. The response body is identical to a single
-            # long park: the last store.poll result, ≤200 events, more, reset.
+            # check client liveness / supersede between slices. A client that
+            # disconnects or reconnects frees its slot within ~1 slice instead
+            # of holding it for the full wait. The response body is identical
+            # to a single long park: the last store.poll result, ≤200 events,
+            # more, reset.
             store = get_store()
             deadline = time.monotonic() + wait
             result = None
@@ -132,6 +152,11 @@ def make_blueprint(get_store, max_parked=8):
                     return reply(result, liveness_path="werkzeug-socket-peek")
                 if wait_left <= 0:
                     return reply(result, liveness_path="werkzeug-socket-peek")
+                if my_gen is not None:
+                    with _sup_lock:
+                        if _supersede.get(cid) != my_gen:
+                            log.debug("poll superseded by a newer cid request")
+                            return reply(result, liveness_path="cid-superseded")
                 gone, path = _client_gone(request)
                 if gone:
                     log.debug("poll client disconnected; freeing slot early")

@@ -1,31 +1,31 @@
 {
   "mode": "storm",
   "wait_used": 25,
-  "duration_s": 189,
-  "forced_reconnects": 247,
-  "polls": 283,
+  "duration_s": 90,
+  "forced_reconnects": 287,
+  "polls": 332,
   "errors": 0,
   "http_503": 0,
   "http_other_4xx5xx": 0,
-  "http_2xx_polls": 35,
+  "http_2xx_polls": 44,
   "reconciliation": "polls == forced + 2xx_polls + other_4xx5xx + in-flight-at-exit (the appender's POSTs are no longer counted)",
-  "events_appended": 35,
-  "events_applied": 35,
+  "events_appended": 44,
+  "events_applied": 44,
   "longest_consecutive_503": 0,
   "liveness_path": [
     "werkzeug-socket-peek"
   ],
   "time_to_first_event_after_reconnect_ms": {
-    "n": 33,
-    "p50": 169,
-    "max": 1948,
+    "n": 41,
+    "p50": 214,
+    "max": 1787,
     "note": "event cadence (~2 s append interval) \u2014 NOT reconnect cost; the device half uses the catch-up metric"
   },
   "verdict_note": "slots_free_promptly = http_503 == 0.",
   "self_recorded_hashes": {
-    "api_v2": "0af0b0fe0f3d15623b17d4f34b15fe23a2b09dc8916f8ad6e6887ba601f20967",
-    "poll_js": "370e234afe8cb9a5d974078f31f930775693fedd606fab2aa21e6eb91dbaad42",
-    "app_py": "2d4d731aa20d620cce985cb65c9e50f021b0fce7964b2e4e77e03371973860db"
+    "api_v2": "b84ab98ec8bf2e7e82afc91de12b9f4d9758011a241aff31ea40272ea1e8ad62",
+    "poll_js": "0b8554f5ce1818f79e7c5551bfb9102ce997fdbca4a4a6c89a498a52244d8425",
+    "app_py": "e97c73e6a5063e45f5d4ea2d22beb745130b0d72fd8cefcd392f2fc231294603"
   },
   "hash_checks_vs_p13_list": {
     "sitecrew/api_v2.py": true,
