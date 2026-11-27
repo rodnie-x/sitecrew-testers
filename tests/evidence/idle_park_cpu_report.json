@@ -7,8 +7,8 @@
   "baseline": {
     "phase": "baseline",
     "wall_s": 180,
-    "cpu_pct_avg": 3.122,
-    "cpu_pct_p95": 3.605,
+    "cpu_pct_avg": 0.217,
+    "cpu_pct_p95": 0.4,
     "intervals": 36,
     "state": {
       "charging_usb": "true",
@@ -23,8 +23,8 @@
   "park": {
     "phase": "park",
     "wall_s": 600,
-    "cpu_pct_avg": 67.037,
-    "cpu_pct_p95": 71.805,
+    "cpu_pct_avg": 0.558,
+    "cpu_pct_p95": 1.199,
     "intervals": 120,
     "state": {
       "charging_usb": "true",
@@ -37,10 +37,10 @@
     "error": null
   },
   "verdict_rule": {
-    "avg_delta_pct": 63.92,
-    "park_p95_pct": 71.805,
+    "avg_delta_pct": 0.34,
+    "park_p95_pct": 1.199,
     "states_match": true,
-    "keep_025s_slices": false,
+    "keep_025s_slices": true,
     "else": "1 s slices + cid supersede (then re-run the storm + slot-freed test)"
   },
   "verdict_note": "machine-generated against the boss's pre-registered rule; the boss confirms.",
