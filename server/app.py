@@ -589,6 +589,12 @@ if _store_enabled():
 
 _STORE = {"events": None, "error": None, "kill": None}
 
+# Boss amendment (P1.2-D ruling): the flat loop ACKs each commit with one
+# unbuffered os.write to this append-only side file in app-private storage.
+# The page cache survives SIGKILL, so the file is the oracle's last_acked
+# source — logcat stdout can lose lines printed just before a kill.
+ACK_FILE = os.path.join(BASE_DIR, "kill_acks.log")
+
 
 def _store(name="main"):
     """EventStore per named DB: main = sitecrew.db, kill = killtest.db (device kill
@@ -640,26 +646,57 @@ def debug_append():
                 i += 1
                 cycle = st.head(stream) + 1
                 mid = "k_%d" % cycle
+                # Boss amendment 2: alternate message and tool by seq parity
+                # (as the batch path does) so device kills also cover
+                # tool_calls.committed_seq atomicity.
+                if cycle % 2 == 1:
+                    def msw(conn, seq, _mid=mid, _s=stream, _i=i):
+                        conn.execute(
+                            "INSERT OR IGNORE INTO chats(id, title, created_at,"
+                            " updated_at) VALUES(?,?,1,1)", (_s, "debug"))
+                        conn.execute(
+                            "INSERT INTO messages(id, chat_id, role, kind,"
+                            " content_json, status, created_at)"
+                            " VALUES(?,?,?,?,?,?,?)",
+                            (_mid, _s, "user", "user",
+                             json.dumps({"p": "F" * 2048, "i": _i}), "final", 1))
+                        return _mid
 
-                def msw(conn, seq, _mid=mid, _s=stream, _i=i):
-                    conn.execute(
-                        "INSERT OR IGNORE INTO chats(id, title, created_at,"
-                        " updated_at) VALUES(?,?,1,1)", (_s, "debug"))
-                    conn.execute(
-                        "INSERT INTO messages(id, chat_id, role, kind, content_json,"
-                        " status, created_at) VALUES(?,?,?,?,?,?,?)",
-                        (_mid, _s, "user", "user",
-                         json.dumps({"p": "F" * 2048, "i": _i}), "final", 1))
-                    return _mid
+                    ev_type = "message.created"
+                    payload = {"p": "F" * 2048, "i": i}
+                    extra = {}
+                else:
+                    tc, tu, tid = "tc_%d" % cycle, "tu_%d" % cycle, "t_%d" % cycle
+
+                    def tsw(conn, seq, _tc=tc, _tu=tu, _tid=tid, _s=stream):
+                        conn.execute(
+                            "INSERT INTO turns(id, chat_id, state, started_at)"
+                            " VALUES(?,?,?,1)", (_tid, _s, "running"))
+                        conn.execute(
+                            "INSERT INTO tool_calls(id, turn_id, tool_use_id,"
+                            " name, status, committed_seq) VALUES(?,?,?,?,?,?)",
+                            (_tc, _tid, _tu, "fs.read", "committed", seq))
+
+                    ev_type = "tool.committed"
+                    payload = {"tool_use_id": tu, "name": "fs.read",
+                               "verified": True}
+                    extra = {"turn_id": tid, "agent": "debug", "site": "phone"}
 
                 try:
-                    env = st.append(stream, "message.created",
-                                    {"p": "F" * 2048, "i": i},
-                                    state_writer=msw, strict=True)
-                    print("SC_STORE_ACK %s %d" % (stream, env["seq"]), flush=True)
+                    env = st.append(stream, ev_type, payload,
+                                    state_writer=msw if ev_type == "message.created" else tsw,
+                                    strict=True, **extra)
                 except Exception as e:
                     print("SC_STORE_ERR %s" % str(e)[:120], flush=True)
                     break
+                # Boss amendment 1: unbuffered ACK side file (survives SIGKILL)
+                try:
+                    fd = os.open(ACK_FILE, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+                    os.write(fd, ("%d\n" % env["seq"]).encode())
+                    os.close(fd)
+                except OSError as e:
+                    print("SC_STORE_ACKFILE_ERR %s" % str(e)[:120], flush=True)
+                print("SC_STORE_ACK %s %d" % (stream, env["seq"]), flush=True)
             _STORE["flat_running"] = False
             print("SC_STORE_FLAT_DONE", flush=True)
 
@@ -740,6 +777,19 @@ def debug_store_state():
         facts["facts_error"] = str(e)[:200]
     wal = st.path + "-wal"
     facts["wal_bytes"] = os.path.getsize(wal) if os.path.exists(wal) else 0
+    # Boss amendment 1: expose the ACK side file (the oracle's last_acked source)
+    try:
+        with open(ACK_FILE, "rb") as f:
+            seqs = [int(x) for x in f.read().split()]
+        facts["ack_file"] = {"name": os.path.basename(ACK_FILE),
+                             "lines": len(seqs),
+                             "last_seq": seqs[-1] if seqs else None,
+                             "bytes": os.path.getsize(ACK_FILE)}
+    except FileNotFoundError:
+        facts["ack_file"] = {"name": os.path.basename(ACK_FILE),
+                             "lines": 0, "last_seq": None, "bytes": 0}
+    except Exception as e:
+        facts["ack_file"] = {"error": str(e)[:200]}
     facts["store_flag"] = {
         "env": os.environ.get("SITECREW_STORE"),
         "marker": os.path.exists(os.path.join(BASE_DIR, "SITECREW_STORE")),
