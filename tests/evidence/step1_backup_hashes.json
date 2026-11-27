@@ -1,0 +1,57 @@
+{
+  "purpose": "step-1 pre-rebuild backup of the legacy app data (D8): queue.json + activity log + WebView localStorage leveldb, pulled via exec-out run-as cat; the NVIDIA key (.env) deliberately EXCLUDED - it never leaves the device",
+  "pulled_utc": "2026-11-27 12:37:59",
+  "files": [
+    {
+      "name": "activity.jsonl",
+      "bytes": 49203,
+      "sha256": "a677f0276a89a7638c975e262e6e4c87fa39045a92e7a208a01fdea66d0b58ec"
+    },
+    {
+      "name": "localStorage_leveldb_000005.ldb",
+      "bytes": 20743,
+      "sha256": "4a20922c0dc14f7b7e01d37db6df2c86ece9753455cc09ac68d4e02b0440e222"
+    },
+    {
+      "name": "localStorage_leveldb_000062.ldb",
+      "bytes": 12673,
+      "sha256": "574e5849c50483343dd58556f0700c71ddb6f57dd41aca5cdae652c5e3e756c6"
+    },
+    {
+      "name": "localStorage_leveldb_000064.ldb",
+      "bytes": 25050,
+      "sha256": "9c19de44c98eabdf8a4d2902d1e5fbe31c228db9ef8d2fede4213f239cd686c8"
+    },
+    {
+      "name": "localStorage_leveldb_000068.ldb",
+      "bytes": 25609,
+      "sha256": "923d57eae78721e329f3e5a5f5b76e53058773779ba562e928e58fd9c251335f"
+    },
+    {
+      "name": "localStorage_leveldb_000070.ldb",
+      "bytes": 25858,
+      "sha256": "a07029a6fe7a681c74adcabc8862cfc8ac3ef8a253fcf8b37215ce5e0e582e37"
+    },
+    {
+      "name": "localStorage_leveldb_000071.log",
+      "bytes": 46655,
+      "sha256": "409f3f6e904d95a33d27c903f5f89d1dbdb478f4c2a7aa9a226830e83b5d0f09"
+    },
+    {
+      "name": "localStorage_leveldb_CURRENT",
+      "bytes": 16,
+      "sha256": "0f1bad70c7bd1e0a69562853ec529355462fcd0423263a3d39d6d0d70b780443"
+    },
+    {
+      "name": "localStorage_leveldb_MANIFEST-000001",
+      "bytes": 3317,
+      "sha256": "0ace9a110800495386eed351d41703252d078ce32cda6c3bb502cb52b7295363"
+    },
+    {
+      "name": "queue.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  ],
+  "note_queue_empty": "queue.json is 2 bytes ([]) - the steering queue was empty at backup time; localStorage leveldb carries the persisted chat state"
+}

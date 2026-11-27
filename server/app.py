@@ -814,6 +814,22 @@ def debug_store_state():
             mods[name] = "error: %s" % str(e)[:100]
     facts["store_modules_sha256"] = mods
 
+    # Boss P1.2-D ruling: JSON-function probe in the facts block (the device
+    # SQLite floor is 3.35.5 — json_extract etc. must be proven present, and
+    # STRICT tables / -> / unixepoch() are banned by tests/test_sqlite_floor.py)
+    try:
+        probe_conn = sqlite3.connect(":memory:")
+        facts["json_functions_probe"] = {
+            "json_extract": probe_conn.execute(
+                "SELECT json_extract('{\"a\":{\"b\":7}}', '$.a.b')").fetchone()[0] == 7,
+            "json_quote": probe_conn.execute(
+                "SELECT json_quote('x')").fetchone()[0] == '"x"',
+            "sqlite_floor_rule": "floor 3.35.5 — banned-feature list lives in tests/test_sqlite_floor.py",
+        }
+        probe_conn.close()
+    except Exception as e:
+        facts["json_functions_probe"] = {"error": str(e)[:200]}
+
     return jsonify({"db": dbname, "head": st.head(stream),
                     "invariants": st.check_invariants(),
                     "error": _STORE["error"], **facts})

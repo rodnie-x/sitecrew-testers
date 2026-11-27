@@ -11319,5 +11319,14 @@
       "logcat_vs_file_delta": 0,
       "unacked": 1
     }
-  ]
+  ],
+  "deployment_note": {
+    "method": "adb push to /data/local/tmp, then run-as com.sitecrew.ai cp into files/app/: server/app.py, sitecrew/store/db.py, sitecrew/store/events.py, sitecrew/api_v2.py, server/static/poll.js; SITECREW_STORE and SITECREW_DEBUG markers touched in BASE_DIR; app force-stopped and relaunched before the run. The pre-deploy app.py was kept on the device as files/app/server/app.py.pre-p12d.bak.",
+    "app_py_pre_deploy_sha256": "a227df641ea9c92704f6aeb1414012fd9cb8e8b6081bc3098cccd3e2f7748738",
+    "app_py_post_deploy_sha256": "5ad83c82a4c256675d75eed1e59ab5e8639f312c9fc7bb59b88a6d6200cd8713",
+    "poll_js_post_deploy_sha256": "370e234afe8cb9a5d974078f31f930775693fedd606fab2aa21e6eb91dbaad42",
+    "store_modules": "unchanged frozen versions (verified by the device's store-state hash assertion during the run)",
+    "base_apk": "Nov 26 build, versionName 0.1, pulled sha256 4a64e8a945e2a2a46e9797ab7d05997e895c38e7e47f70d66f0b2c8846d8524f",
+    "logcat_vs_file_characterization": "deltas are TAIL-ONLY (the ACK side file is written before the logcat print; a kill between the two leaves the file one ahead). logcat seq lists are contiguous in every cycle \u2014 no mid-stream loss. The side file remains the right oracle because the two channels can disagree at the tail."
+  }
 }

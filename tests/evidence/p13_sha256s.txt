@@ -1,0 +1,13 @@
+# P1.3 frozen set (boss: new api_v2.py and poll.js hashes in p13_sha256s.txt; the p12 list stays frozen)
+# generated 2026-11-27 13:01:16 UTC
+0af0b0fe0f3d15623b17d4f34b15fe23a2b09dc8916f8ad6e6887ba601f20967  sitecrew/api_v2.py  (AMENDED per boss P1.3 ruling: park slices + client-liveness (select+MSG_PEEK, feature-detected), slot freed on disconnect, X-Liveness-Path header)
+370e234afe8cb9a5d974078f31f930775693fedd606fab2aa21e6eb91dbaad42  server/static/poll.js  (integrated poll client (the file the WebView loads))
+1d8c925417fd70faa427474e31e9cb31a42bde06e64e5b737729a51abb72e547  sitecrew/store/db.py  (FROZEN store module)
+f2a9716d658e515ba677d9e0425e384ebe61efc6ddc3461e3f21a88a4591e715  sitecrew/store/events.py  (FROZEN store module)
+2d4d731aa20d620cce985cb65c9e50f021b0fce7964b2e4e77e03371973860db  server/app.py  (server (debug gating, ACK side file, facts))
+46e17f1bbe77ca62b62b5e4a0d23015e49e758c4511ba86d5f0f90afcd5d0d87  tests/p13_pc_run.py  (P1.3 PC orchestrator)
+24bb16e0586914946b72f40446b3f030f486a57cbe3cbd8baa78df62a835c67d  tests/p13_client.cjs  (P1.3 PC client (latency/reconnect/storm modes))
+818ba5a1406ec9767411082ee658cdd49dcb8a7a6571a1a2b1e1bbb28e65110d  tests/p13_storm_run.py  (PC storm run)
+990474835e0d1dfed983d3293732df7b10e03047ae85900f7b863f2843097fe7  tests/test_slot_freed.py  (slot-freed test (boss: add the slot-freed test))
+43c3f17509c2abdfce50416dbe824581426ed1fc46afd81e98945fa8e42dc070  tests/test_poll_contract.py  (gap re-poll + idempotent apply)
+f3baca68f73f17768657d49cbf138cb639f57dcd2ff6f8df33837756cfbd28ac  tests/test_sqlite_floor.py  (device SQLite floor 3.35.5 lint + runtime pin)
