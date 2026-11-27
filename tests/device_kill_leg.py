@@ -78,20 +78,54 @@ def http(method, path, payload=None, timeout=20):
         return json.loads(r.read().decode("utf-8"))
 
 
+def ensure_forward():
+    """Re-establish the adb forward after USB/adb blips (the phone link is
+    known-flaky); waits for the device to come back if it dropped, then
+    re-forwards. Returns True when a device is present."""
+    for _ in range(30):                       # up to ~150 s for a USB blip
+        try:
+            if adb_helpers.serial():
+                adb_helpers.forward(18110)
+                return True
+        except Exception:
+            pass
+        time.sleep(5)
+    return False
+
+
 def http_retry(method, path, payload=None, tries=6, timeout=20):
-    """HTTP with retries — the phone link and app boot are known-flaky."""
+    """HTTP with retries — the phone link and app boot are known-flaky.
+    Re-establishes the adb forward between retries (a dead forward shows up
+    as connection-refused on 127.0.0.1 even though the app is fine)."""
     last = None
     for _ in range(tries):
         try:
             return http(method, path, payload, timeout=timeout)
         except Exception as e:                                   # noqa: PERF203
             last = e
+            ensure_forward()
             time.sleep(3)
     raise last
 
 
 def wait_server(timeout=240):
-    return adb_helpers.wait_server(BASE, timeout=timeout)
+    """Wait for the app's server through the forward, re-establishing the
+    forward while waiting (a dead forward looks exactly like a dead app)."""
+    import urllib.request
+    deadline = time.time() + timeout
+    attempt = 0
+    while time.time() < deadline:
+        attempt += 1
+        try:
+            with urllib.request.urlopen(BASE + "/api/state", timeout=3) as r:
+                if r.status == 200:
+                    return True
+        except Exception:
+            pass
+        if attempt % 3 == 0:
+            ensure_forward()
+        time.sleep(2)
+    return False
 
 
 def dump_diagnostics(tag):
@@ -486,7 +520,15 @@ def main():
     invalid = 0
     expected_before_head = initial_head
     for cycle in range(CYCLES):
-        res = run_cycle(rng, serial, cycle, expected_before_head)
+        try:
+            res = run_cycle(rng, serial, cycle, expected_before_head)
+        except Exception as e:
+            # one bad USB blip must not kill the run: record the cycle as
+            # invalid with diagnostics, self-heal, continue
+            res = {"cycle": cycle, "valid": False, "acks": 0,
+                   "error": "leg exception: %s" % str(e)[:200]}
+            dump_diagnostics("cycle%d_exception" % cycle)
+            ensure_forward()
         total_acks += res.get("acks") or 0
         if res.get("unacked"):
             unacked_sum += res["unacked"]
