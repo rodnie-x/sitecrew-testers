@@ -839,15 +839,22 @@ def debug_store_state():
 def debug_proc_stat():
     """The server process's own /proc/self/stat (utime+stime ticks) for the
     P1.3 idle-park CPU measurement. Self-reads are always allowed — run-as
-    reads of /proc/<pid>/stat are DENIED on Android 14 (measured)."""
+    reads of /proc/<pid>/stat are DENIED on Android 14 (measured). mono is a
+    monotonic timestamp so the sampler computes dt on the device's clock
+    (review fix #6/#7)."""
     if not _store_enabled() or not _debug_enabled():
         return jsonify({"error": "store/debug flag off"}), 404
     try:
         with open("/proc/self/stat", "rb") as f:
             raw = f.read().decode("utf-8", "replace")
         fields = raw.rsplit(")", 1)[1].split()
+        try:
+            user_hz = os.sysconf("SC_CLK_TCK")
+        except (AttributeError, ValueError, OSError):
+            user_hz = 100                       # Android kernel ABI constant
         return jsonify({"utime": int(fields[11]), "stime": int(fields[12]),
-                        "state": fields[0], "pid": os.getpid()})
+                        "state": fields[0], "pid": os.getpid(),
+                        "mono": time.monotonic(), "user_hz": user_hz})
     except Exception as e:
         return jsonify({"error": str(e)[:200]}), 500
 
@@ -858,18 +865,22 @@ _PROBE_RESULTS = {"results": None}
 @app.get("/api/v2/debug/probe-page")
 def debug_probe_page():
     """P1.3 device half (boss spec): the in-page probe, served INTO the real
-    WebView (debug-gated). It loads the real /static/poll.js, records the hash
-    of the poll.js THIS page fetched, reads X-Liveness-Path in-page, then
-    measures t0 (before the append POST) -> t1 (onEvents) with a single
-    performance.now() clock over 200 samples, and POSTs the results to
-    /api/v2/debug/probe-results (read by the harness over adb forward)."""
+    WebView (debug-gated). It loads the real poll.js (served at /poll.js —
+    Flask static_url_path='' puts server/static/* at the site root), records
+    the ETag + hash of the poll.js THIS page fetched (default cache mode, so
+    the hashed bytes are the ones the <script> ran), reads X-Liveness-Path
+    in-page, then measures t0 (before the append POST) -> t1 (onEvents) with
+    a single performance.now() clock over 200 samples, and POSTs the results
+    to /api/v2/debug/probe-results (read by the harness over adb forward).
+    A fresh ?run=<uuid> invalidates previous results (review fix #10)."""
     if not _store_enabled() or not _debug_enabled():
         return jsonify({"error": "store/debug flag off"}), 404
+    _PROBE_RESULTS["results"] = None            # review fix #10: no stale data
     html = (
         '<!doctype html><html><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         "<title>P1.3 in-page probe</title>"
-        '<script src="/static/poll.js"></script></head>'
+        '<script src="/poll.js"></script></head>'
         "<body><h3>P1.3 in-page probe (debug)</h3>"
         '<pre id="out">running...</pre>'
         "<script>\n(async function () {\n"
@@ -877,10 +888,13 @@ def debug_probe_page():
         "  const say = (m) => { out.push(m);"
         " document.getElementById('out').textContent = out.join('\\n'); };\n"
         "  try {\n"
-        "    const pollResp = await fetch('/static/poll.js', { cache: 'no-store' });\n"
+        "    const pollResp = await fetch('/poll.js');\n"           # review #1: site-root URL + default cache (the hashed bytes are the executed ones)
+        "    if (!pollResp.ok) throw new Error('poll.js HTTP ' + pollResp.status);\n"
+        "    const pollEtag = pollResp.headers.get('ETag') || 'none';\n"
         "    const pollBytes = new Uint8Array(await pollResp.arrayBuffer());\n"
         "    const pollHash = [...new Uint8Array(await crypto.subtle.digest"
         "('SHA-256', pollBytes))].map(b => b.toString(16).padStart(2, '0')).join('');\n"
+        "    const pollLoaded = (typeof SiteCrewPoll !== 'undefined');\n"   # review LOW: log what actually executed
         "    const st = await (await fetch('/api/v2/debug/store-state?db=main')).json();\n"
         "    const head = st.head || 0;\n"
         "    const lr = await fetch('/api/v2/poll?streams=c_debug:' + head + '&wait=0');\n"
@@ -920,6 +934,8 @@ def debug_probe_page():
         " lat[Math.min(lat.length - 1, Math.floor(q * lat.length))] : null;\n"
         "    const results = { user_agent: navigator.userAgent,\n"
         "      poll_js_sha256_page_fetched: pollHash,\n"
+        "      poll_js_etag: pollEtag,\n"
+        "      poll_js_loaded: pollLoaded,\n"
         "      liveness_path_inpage: liveness,\n"
         "      start_head: head, samples_requested: N,\n"
         "      received: samples.length, misses: misses,\n"
@@ -934,10 +950,11 @@ def debug_probe_page():
         "    say('DONE ' + JSON.stringify({ received: results.received,"
         " misses: misses, p50: results.p50_ms, p95: results.p95_ms,"
         " max: results.max_ms, liveness: liveness,"
-        " pollHash: pollHash.slice(0, 16) }));\n"
+        " pollLoaded: pollLoaded, pollHash: pollHash.slice(0, 16) }));\n"
         "  } catch (e) {\n"
         "    say('ERROR ' + (e && e.message));\n"
         "    window.__probeError = String(e && e.message);\n"
+        "    window.__probeResults = { error: window.__probeError };\n"
         "  }\n"
         "})();\n</script></body></html>"
     )

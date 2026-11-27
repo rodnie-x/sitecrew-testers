@@ -134,6 +134,12 @@ def make_blueprint(get_store, max_parked=8):
                     for k in list(_supersede)[:len(_supersede) - _SUP_MAX]:
                         _supersede.pop(k, None)
         try:
+            # Review fix #11: detect the liveness mechanism ONCE and report it
+            # on EVERY reply (a wait=0 reply returns before _client_gone runs,
+            # so the in-page probe could otherwise never see 'none').
+            live_path = ("werkzeug-socket-peek"
+                         if request.environ.get("werkzeug.socket") is not None
+                         else "none")
             # Boss P1.3 ruling: hold the slot across PARK_SLICE_S slices and
             # check client liveness / supersede between slices. A client that
             # disconnects or reconnects frees its slot within ~1 slice instead
@@ -149,9 +155,9 @@ def make_blueprint(get_store, max_parked=8):
                 result = store.poll(cursors, wait=slice_wait)
                 events = result.get("events") or []
                 if events or result.get("more"):
-                    return reply(result, liveness_path="werkzeug-socket-peek")
+                    return reply(result, liveness_path=live_path)
                 if wait_left <= 0:
-                    return reply(result, liveness_path="werkzeug-socket-peek")
+                    return reply(result, liveness_path=live_path)
                 if my_gen is not None:
                     with _sup_lock:
                         if _supersede.get(cid) != my_gen:

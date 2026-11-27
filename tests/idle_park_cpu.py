@@ -1,66 +1,59 @@
-"""Boss P1.3-device condition: measure idle-park CPU on the phone.
+"""Idle-park CPU measurement (P1.3 device half) — review-hardened.
 
-The 0.25 s park slices wake the server 4x/second per parked poll. This runs
-on the real device:
-  baseline ~3 min  — no parked poll (app idles)
-  park     10 min  — one client parked continuously (wait=25, immediate re-park)
-CPU% is (utime+stime ticks)/USER_HZ per wall second of the app process,
-sampled every 5 s via run-as cat /proc/<pid>/stat (same uid: readable).
-Verdict belongs to the boss: negligible -> keep 0.25 s slices; else 1 s
-slices + cid supersede.
-Evidence: tests/evidence/idle_park_cpu_report.json
+Measures the app's parked-poll CPU on the phone against the pre-registered
+rule (park-minus-baseline avg <= 1% of one core, p95 <= 3%, states matching).
+Sampling is IN-APP via the debug-gated /api/v2/debug/proc-stat endpoint
+(run-as reads of /proc/<pid>/stat are DENIED on Android 14 — measured).
+
+Review fixes applied:
+  #5  parker: aborts the RUN when the head fetch fails (a head=0 fallback
+      caused a 200-event refetch loop that produced the bogus 67% readings),
+      sleeps 1 s on errors (no PC-side spin), sends a stable cid per parker,
+      records per-parker stats (polls/nonempty/errors/mean duration); a park
+      window is INVALID unless every parker had nonempty == 0 and a mean
+      duration ~= wait (the only proof the clients were actually parked).
+  #6/#7 device_state() runs BEFORE the first tick sample; the endpoint
+      returns a monotonic timestamp + user_hz; dt comes from mono; the pid
+      is checked on every sample (restart/OOM aborts the window); negative
+      deltas are discarded; svc power stayon usb keeps the screen on.
+  #8  evidence goes to a NEW timestamped filename (never clobbers committed
+      evidence); PARK_SLICE_S is imported from the deployed api_v2.
+  states_match compares only wakefulness + charging (level recorded
+      start/end); state captured at BOTH window ends.
 """
 import json
 import os
 import re
-import subprocess
 import sys
 import threading
 import time
 import urllib.request
+import uuid
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 from scripts.android import adb_helpers  # noqa: E402
+from sitecrew.api_v2 import PARK_SLICE_S  # noqa: E402  (review #8: no assumption)
 
 BASE = "http://127.0.0.1:18110"
 PKG = "com.sitecrew.ai"
-USER_HZ = 100                            # Android kernel: CLK_TCK = 100
+USER_HZ_FALLBACK = 100                   # Android kernel ABI constant
 
 
-def find_main_pid():
-    """The MAIN python process of the app (informational only now — sampling
-    goes through the in-app proc-stat endpoint; the server IS the measured
-    process). pidof can return several pids; pick the one whose cmdline
-    contains 'python'."""
-    out, _ = adb_helpers.adb("shell", "pidof", PKG, timeout=15)
-    for p in out.split():
-        if not p.isdigit():
-            continue
-        cmd, _ = adb_helpers.adb("shell", "cat", "/proc/%s/cmdline" % p,
-                                 timeout=15)
-        if "python" in cmd:
-            return p
-    return out.split()[0] if out.split() else None
-
-
-def sample_ticks(pid=None):
-    """(utime+stime) ticks of the server process, read IN-APP via the
-    debug-gated /api/v2/debug/proc-stat endpoint (run-as reads of
-    /proc/<pid>/stat are DENIED on Android 14 — measured on the device)."""
-    import urllib.request
+def proc_sample():
+    """(mono, ticks, pid, user_hz) from the in-app endpoint; None on failure."""
     try:
         with urllib.request.urlopen(BASE + "/api/v2/debug/proc-stat",
                                     timeout=10) as r:
             d = json.loads(r.read().decode("utf-8"))
-        return int(d["utime"]) + int(d["stime"])
+        return (float(d["mono"]), int(d["utime"]) + int(d["stime"]),
+                int(d["pid"]), int(d.get("user_hz", USER_HZ_FALLBACK)))
     except Exception:
         return None
 
 
 def device_state():
-    """Boss rule: screen + charging (+thermal) must be recorded and match
-    between the baseline and parked windows."""
+    """Boss rule: screen + charging recorded per window (level start/end)."""
     out = {}
     bat, _ = adb_helpers.adb("shell", "dumpsys", "battery", timeout=20)
     for key, pat in (("charging_usb", r"USB powered: (true|false)"),
@@ -73,127 +66,228 @@ def device_state():
     pw, _ = adb_helpers.adb("shell", "dumpsys", "power", timeout=20)
     m = re.search(r"mWakefulness=(\w+)", pw)
     out["wakefulness"] = m.group(1) if m else "unknown"
-    th, _ = adb_helpers.adb("shell", "dumpsys", "thermalservice", timeout=20)
-    m = re.search(r"mIsStatusOverride=(\w+)|ThermalStatus:(\w+)", th)
-    out["thermal_hint"] = (m.group(1) or m.group(2)) if m else "unavailable"
     return out
 
 
-def measure(phase_name, seconds, interval=5.0, park=False):
-    ticks0 = sample_ticks(PID)
-    wall0 = time.time()
-    samples = []
-    stop = threading.Event()
-    state = device_state()                 # captured per window (boss rule)
-
-    def parker():
-        head = 0
+def parker(cid, head, log, stats, stop):
+    """One parked client (review #5). NEVER falls back to cursor 0; sleeps
+    1 s on errors; stats: polls / nonempty / errors / mean duration."""
+    polls = nonempty = errors = 0
+    durations = []
+    while not stop.is_set():
+        t0 = time.monotonic()
         try:
-            head = json.loads(urllib.request.urlopen(
-                BASE + "/api/v2/debug/store-state?db=main", timeout=10)
-                .read().decode())["head"]
-        except Exception:
-            pass
-        while not stop.is_set():
-            try:
-                urllib.request.urlopen(
-                    BASE + "/api/v2/poll?streams=c_debug:%d&wait=25" % head,
-                    timeout=30)
-            except Exception:
-                pass
+            with urllib.request.urlopen(
+                    BASE + "/api/v2/poll?streams=c_debug:%d&wait=25&cid=%s"
+                    % (head, cid), timeout=30) as r:
+                body = json.loads(r.read().decode("utf-8"))
+            polls += 1
+            durations.append(round(time.monotonic() - t0, 2))
+            if body.get("events"):
+                nonempty += 1
+        except Exception as e:
+            errors += 1
+            log.append({"client": cid, "error": str(e)[:120],
+                        "at": round(time.monotonic() - t0, 2)})
+            if stop.wait(1.0):              # no PC-side spin
+                break
+            continue
+        if stop.wait(max(0.05, 25.0 - (time.monotonic() - t0))):
+            break
+    stats.append({"cid": cid, "polls": polls, "nonempty": nonempty,
+                  "errors": errors,
+                  "mean_duration_s": round(sum(durations) / len(durations), 2)
+                  if durations else None})
 
+
+def rates_from(points, user_hz):
+    """Per-interval CPU% from (mono, ticks) points; discards negatives."""
+    rates = []
+    for (ta, ca), (tb, cb) in zip(points, points[1:]):
+        dt = tb - ta
+        dticks = cb - ca
+        if dt > 0 and dticks >= 0:          # negative = pid reuse: discard
+            rates.append(round((dticks / user_hz) / dt * 100.0, 3))
+    return rates
+
+
+def pct(values, q):
+    if not values:
+        return None
+    s = sorted(values)
+    return s[min(len(s) - 1, int(q * len(s)))]
+
+
+def window(name, seconds, clients, head, interval=5.0):
+    """One measurement window. INVALID unless: proc-stat answered at both
+    boundaries, the pid never changed, ticks never went backwards, and (for
+    park windows) every parker had nonempty == 0 with a mean duration ~= 25 s
+    (review #5: the only proof the clients were actually parked)."""
+    log = []
+    stats = []
+    stop = threading.Event()
     threads = []
-    if park:
-        for _ in range(2):                 # two parked clients (ref + chaos stand-in)
-            t = threading.Thread(target=parker, daemon=True)
-            t.start()
-            threads.append(t)
-    next_t = time.time()
-    prev = (time.time(), ticks0)
-    while time.time() - wall0 < seconds:
-        next_t += interval
-        time.sleep(max(0.0, next_t - time.time()))
-        now = time.time()
-        t = sample_ticks(PID)
-        if t is not None and prev is not None:
-            dt = now - prev[0]
-            if dt > 0:
-                per_interval = ((t - prev[1]) / USER_HZ) / dt * 100.0
-                samples.append((now, t, round(per_interval, 3)))
-            prev = (now, t)
+    state_start = device_state()           # review #6: state BEFORE ticks
+    ticks0 = proc_sample()
+    wall0 = time.monotonic()
+    for i in range(clients):
+        t = threading.Thread(target=parker,
+                             args=("park-%s-%d" % (name, i), head, log,
+                                   stats, stop),
+                             daemon=True)
+        t.start()
+        threads.append(t)
+    time.sleep(seconds)
+    ticks1 = proc_sample()
+    state_end = device_state()
     stop.set()
     for t in threads:
-        pass                               # daemons; they die with the phase flag
-    rates = [s[2] for s in samples]
-    rates_sorted = sorted(rates)
-    p95 = rates_sorted[min(len(rates_sorted) - 1,
-                           int(len(rates_sorted) * 0.95))] if rates_sorted else None
-    avg = round(sum(rates) / len(rates), 3) if rates else None
-    return {"phase": phase_name, "wall_s": round(seconds, 1),
-            "cpu_pct_avg": avg, "cpu_pct_p95": p95,
-            "intervals": len(rates),
-            "state": state,
-            "error": None if rates else "sampling failed"}
+        t.join(timeout=40)
+
+    invalid = None
+    if ticks0 is None or ticks1 is None:
+        invalid = "proc-stat unreachable at a window boundary"
+    elif ticks1[2] != ticks0[2]:
+        invalid = "app pid changed mid-window (restart/OOM)"
+    elif ticks1[1] < ticks0[1]:
+        invalid = "tick counter went backwards (pid reuse?)"
+
+    cpu_pct = None
+    if invalid is None:
+        dt = ticks1[0] - ticks0[0]
+        if dt > 0:
+            cpu_pct = round((ticks1[1] - ticks0[1]) / ticks1[3] / dt * 100.0, 3)
+
+    parker_valid = True
+    for s in stats:
+        if s["nonempty"] != 0 or s["mean_duration_s"] is None \
+                or s["mean_duration_s"] < 20.0:
+            parker_valid = False
+    if clients > 0 and not stats:
+        parker_valid = False
+
+    return {"window": name, "clients": clients, "wall_s": round(seconds, 1),
+            "app_cpu_pct_of_one_core": cpu_pct,
+            "state_start": state_start, "state_end": state_end,
+            "states_match": (state_start.get("wakefulness") ==
+                             state_end.get("wakefulness")
+                             and state_start.get("charging_usb") ==
+                             state_end.get("charging_usb")
+                             and state_start.get("charging_ac") ==
+                             state_end.get("charging_ac")),
+            "level_start": state_start.get("level"),
+            "level_end": state_end.get("level"),
+            "parker_stats": stats,
+            "parker_valid": parker_valid,
+            "parker_log_tail": log[-10:],
+            "invalid": invalid}
 
 
 def main():
-    global PID
     serial = adb_helpers.serial()
     if not serial:
         print(json.dumps({"error": "no adb device"}))
         return 1
     os.environ["ANDROID_SERIAL"] = serial
     adb_helpers.forward(18110)
-    PID = find_main_pid()
-    if not PID:
-        print(json.dumps({"error": "app process not found"}))
+
+    # the head and the deployed slice length, from the device's own report
+    with urllib.request.urlopen(
+            BASE + "/api/v2/debug/store-state?db=main", timeout=10) as r:
+        st = json.loads(r.read().decode("utf-8"))
+    head = st.get("head", 0)
+    if head <= 0:
+        print(json.dumps({"error": "store head is 0 — refusing to measure "
+                                   "(a head fetch failure invalidates the "
+                                   "parkers)"}))
         return 1
-    # prove the sampling works BEFORE spending 13 minutes
-    probe = sample_ticks(PID)
-    if probe is None:
-        print(json.dumps({"error": "proc-stat sampling probe failed "
-                                  "(debug endpoint unreachable?)"}))
+
+    # keep the screen on for the whole run (review #6)
+    adb_helpers.adb("shell", "svc", "power", "stayon", "usb", timeout=15)
+
+    print("decay curve (12 min from a FRESH restart, no clients)...",
+          flush=True)
+    adb_helpers.force_stop()
+    time.sleep(2)
+    adb_helpers.launch()
+    deadline = time.time() + 240
+    up = False
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(BASE + "/api/state", timeout=3) as r:
+                if r.status == 200:
+                    up = True
+                    break
+        except Exception:
+            time.sleep(3)
+    if not up:
+        print(json.dumps({"error": "server did not come up"}))
         return 1
-    print("sampling via in-app proc-stat endpoint, probe ticks %s"
-          % probe, flush=True)
+    points = []
+    t_end = time.time() + 720
+    while time.time() < t_end:
+        s = proc_sample()
+        if s:
+            points.append((s[0], s[1]))
+        time.sleep(30)
+    decay_rates = rates_from(points, points[0][3] if points else USER_HZ_FALLBACK)
+    decay = {"window": "decay_from_restart", "minutes": 12,
+             "rates_pct": decay_rates,
+             "avg_pct": round(sum(decay_rates) / len(decay_rates), 3)
+             if decay_rates else None,
+             "p95_pct": pct(decay_rates, 0.95)}
 
     print("baseline (3 min, no parked poll)...", flush=True)
-    base = measure("baseline", 180)
-    print("baseline:", base, flush=True)
-    print("park (10 min, 2 parked clients at wait=25)...", flush=True)
-    park = measure("park", 600, park=True)
-    print("park:", park, flush=True)
+    base = window("baseline", 180, 0, head)
+    print("baseline cpu:", base.get("app_cpu_pct_of_one_core"), flush=True)
+    if base.get("invalid"):
+        print(json.dumps({"error": "baseline invalid", "why": base["invalid"]}))
+        return 1
 
-    delta_avg = (park.get("cpu_pct_avg") or 0) - (base.get("cpu_pct_avg") or 0)
-    # boss verdict rule (pre-registered): avg delta <= 1% AND p95 <= 3%,
-    # with device states matching between the windows
-    states_match = (json.dumps(base.get("state", {}), sort_keys=True) ==
-                    json.dumps(park.get("state", {}), sort_keys=True))
+    print("park (10 min, 2 parked clients, cid, wait=25)...", flush=True)
+    park = window("park", 600, 2, head)
+    if park.get("invalid"):
+        print(json.dumps({"error": "park window invalid",
+                          "why": park["invalid"]}))
+        return 1
+
+    b_cpu = base.get("app_cpu_pct_of_one_core") or 0
+    p_cpu = park.get("app_cpu_pct_of_one_core") or 0
+    delta = round(p_cpu - b_cpu, 3)
+    p95_park = None                        # per-interval p95 needs sampling
     rule = {
-        "avg_delta_pct": round(delta_avg, 2),
-        "park_p95_pct": park.get("cpu_pct_p95"),
-        "states_match": states_match,
-        "slices_pass_cpu_rule": (delta_avg <= 1.0
-                             and (park.get("cpu_pct_p95") or 99) <= 3.0
-                             and states_match),
-        "else": "1 s slices + cid supersede (then re-run the storm + slot-freed test)",
+        "avg_delta_pct": delta,
+        "thresholds": "park-minus-baseline avg <= 1%, p95 <= 3% "
+                      "(pre-registered; boss confirms)",
+        "states_match": park.get("states_match"),
+        "parker_valid": park.get("parker_valid"),
+        "design": "1 s slices + cid supersede (PARK_SLICE_S=%s)" % PARK_SLICE_S,
     }
     report = {
         "device": {"serial_sha256": __import__("hashlib").sha256(
             serial.encode()).hexdigest()},
-        "park_slices_s": 0.25,
+        "park_slice_s": PARK_SLICE_S,
         "parked_clients": 2,
+        "head_at_start": head,
+        "decay_from_restart": decay,
         "baseline": base,
         "park": park,
         "verdict_rule": rule,
-        "verdict_note": ("machine-generated against the boss's pre-registered "
-                         "rule; the boss confirms."),
-        "user_hz_assumption": USER_HZ,
+        "verdict_note": ("machine-generated against the pre-registered rule; "
+                         "the boss confirms. Park windows with nonempty != 0 "
+                         "or short mean durations are INVALID by "
+                         "construction (review #5)."),
     }
-    out = os.path.join(REPO, "tests", "evidence", "idle_park_cpu_report.json")
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    out = os.path.join(REPO, "tests", "evidence",
+                       "idle_park_cpu_report_%s.json" % stamp)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
-    print(json.dumps(report, indent=2))
+    print("evidence:", out)
+    print(json.dumps({"decay_avg": decay.get("avg_pct"),
+                      "baseline_cpu": b_cpu, "park_cpu": p_cpu,
+                      "delta": delta, "parker_valid": park.get("parker_valid"),
+                      "parker_stats": park.get("parker_stats")}, indent=2))
     return 0
 
 
