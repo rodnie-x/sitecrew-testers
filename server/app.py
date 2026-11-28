@@ -587,6 +587,32 @@ if _store_enabled():
     register_v2(app, lambda: _store("main"))         # get_store() -> the process-wide EventStore
 
 
+# ---------------- CPU diagnostic (docs/DEVICE_CPU_DIAG_SPEC.md §1, §7) ------
+# Frozen edit set member. Gated by the COMPILE-TIME build flag
+# (build_flags.DEBUG_ENDPOINTS), not env/markers: a release APK ships False
+# and these routes are never registered (inert/404 by construction, and
+# cpu_diag is never imported). The diag only OBSERVES — it never touches the
+# frozen EventStore/db/poll semantics.
+
+def _register_cpu_diag():
+    try:
+        from build_flags import DEBUG_ENDPOINTS      # compile-time constant
+    except Exception as e:
+        print("SC_CPU_DIAG_FLAG_ERR %s" % str(e)[:120], flush=True)
+        return
+    if not DEBUG_ENDPOINTS:
+        return
+    try:
+        import cpu_diag
+        cpu_diag.register_diag(app, BASE_DIR)        # registers /api/v2/debug/diag/*
+    except Exception as e:
+        # A broken diagnostic must never take the app down (same rule as build_crew).
+        print("SC_CPU_DIAG_REG_ERR %s" % str(e)[:160], flush=True)
+
+
+_register_cpu_diag()
+
+
 _STORE = {"events": None, "error": None, "kill": None}
 
 # Boss amendment (P1.2-D ruling): the flat loop ACKs each commit with one
