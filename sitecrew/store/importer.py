@@ -14,6 +14,8 @@ Design (amends my earlier "one transaction per source"; the chat is the atomic u
   not at all; a rerun skips chats whose marker matches and redoes the rest (ids are deterministic and
   every insert is OR IGNORE, so redoing is harmless).
 - one final append to the `office` stream writes the source-level marker + `system.import.completed`.
+- the cross-source driver order is fixed queue_json -> ram -> recents; merged transcript chains
+  intentionally follow that invocation order.
 - message text is stored VERBATIM (never parsed and re-serialized); the byte-compare is on `text`.
 - ids derive from (source, chat index, message index), never from content: duplicate messages stay
   separate rows. client_msg_id stays NULL (an empty string would collide under UNIQUE(chat_id, client_msg_id)).
@@ -105,13 +107,16 @@ def import_chat(store, source, ci, chat, now_ms=None):
     msgs, queued = chat.get("messages", []), chat.get("queued", [])
     items = [
         {"type": "message.created", "id": imp_id("m", source, ci, mi),
-         "data": {"text": m["text"], "origin": "import", "source": source},
+         "data": {"text": m["text"], "role": m["role"], "kind": m["role"],
+                  "parent_id": imp_id("m", source, ci, mi - 1) if mi else None,
+                  "origin": "import", "source": source},
          "ts": m.get("ts") or now}
         for mi, m in enumerate(msgs)
     ]
     items.extend(
         {"type": "message.created", "id": imp_id("qm", source, ci, qi),
-         "data": {"text": qm["text"], "origin": "import", "source": source},
+         "data": {"text": qm["text"], "role": "user", "kind": "user", "parent_id": None,
+                  "origin": "import", "source": source, "queued": True},
          "ts": qm.get("ts") or now}
         for qi, qm in enumerate(queued))
     items.append({"type": "system.import.chat", "data": {
@@ -146,6 +151,10 @@ def import_chat(store, source, ci, chat, now_ms=None):
                  existing["model"] if existing["model"] is not None else chat.get("model"),
                  created, updated, cid))
             prev = existing["head_message_id"]
+        if msgs:
+            # append_batch serializes data after state_writer: bind the first replay
+            # parent to the head read in THIS transaction, including a live chat.
+            items[0]["data"]["parent_id"] = prev
         for mi, m in enumerate(msgs):
             mid = imp_id("m", source, ci, mi)
             content = {"text": m["text"], "origin": "import", "source": source}

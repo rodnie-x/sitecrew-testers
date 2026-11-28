@@ -58,7 +58,7 @@ def utc_ms():
 
 
 def valid_chat_id(chat_id):
-    return (isinstance(chat_id, str) and _ID_RE.match(chat_id or "")
+    return (isinstance(chat_id, str) and _ID_RE.fullmatch(chat_id or "")
             and chat_id not in _FORBIDDEN_IDS and ":" not in chat_id and "," not in chat_id)
 
 

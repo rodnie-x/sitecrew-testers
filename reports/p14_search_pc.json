@@ -1,29 +1,27 @@
 {
-  "created_utc": "2026-11-28T09:31:32.018139+00:00",
+  "created_utc": "2026-11-28T11:45:02.880774+00:00",
   "device": {
     "status": "NOT RUN",
-    "reason": "phone unplugged"
+    "reason": "phone connected but CPU diagnostic not deployed/run; no device claim"
   },
-  "scope": "PC-only dual-backend search after FIX FIRST review; boss re-review required",
   "result": "PASS",
+  "scope": "PC-only dual-backend search after narrow re-review; boss re-check pending",
   "search_command": "python -X utf8 -m unittest -v tests.test_search",
-  "search_stderr": "test_pc_to_phone_to_pc_persists_choice_and_rebuilds_every_entry (tests.test_search.BackendSwitching.test_pc_to_phone_to_pc_persists_choice_and_rebuilds_every_entry) ... ok\ntest_randomized_per_document_relevance_against_independent_bm25 (tests.test_search.RandomizedRelevance.test_randomized_per_document_relevance_against_independent_bm25) ... ok\ntest_add_update_delete_lifecycle (tests.test_search.SearchBackends.test_add_update_delete_lifecycle) ... ok\ntest_backend_probe_and_forced_fallback (tests.test_search.SearchBackends.test_backend_probe_and_forced_fallback) ... ok\ntest_canonical_result_sets_byte_match (tests.test_search.SearchBackends.test_canonical_result_sets_byte_match) ... ok\ntest_fallback_candidates_are_aggregated_in_sql (tests.test_search.SearchBackends.test_fallback_candidates_are_aggregated_in_sql) ... ok\ntest_fts_is_rowid_keyed_and_delete_does_not_leave_aliases (tests.test_search.SearchBackends.test_fts_is_rowid_keyed_and_delete_does_not_leave_aliases) ... ok\ntest_query_terms_are_deduplicated_before_both_candidate_paths (tests.test_search.SearchBackends.test_query_terms_are_deduplicated_before_both_candidate_paths) ... ok\ntest_tie_break_limit_clamp_filters_stale_and_query_quoting (tests.test_search.SearchBackends.test_tie_break_limit_clamp_filters_stale_and_query_quoting) ... ok\ntest_title_body_and_tags_are_indexed (tests.test_search.SearchBackends.test_title_body_and_tags_are_indexed) ... ok\ntest_unambiguous_pin_winner (tests.test_search.SearchBackends.test_unambiguous_pin_winner) ... ok\ntest_unambiguous_recency_winner (tests.test_search.SearchBackends.test_unambiguous_recency_winner) ... ok\ntest_unambiguous_relevance_winner (tests.test_search.SearchBackends.test_unambiguous_relevance_winner) ... ok\ntest_unambiguous_same_case_winner (tests.test_search.SearchBackends.test_unambiguous_same_case_winner) ... ok\ntest_unicode_query_parity_matrix (tests.test_search.SearchBackends.test_unicode_query_parity_matrix)\nTwenty literal queries with independently specified expected ID sets. ... ok\n\n----------------------------------------------------------------------\nRan 15 tests in 0.817s\n\nOK\n",
   "related_tests": {
-    "run": 57,
-    "passed": 57,
+    "run": 61,
+    "passed": 61,
     "note": "combined importer/search/store/event/poll/lint/floor suite"
   },
   "fixes": [
-    "Unicode parity matrix 20 queries",
-    "independent randomized BM25 oracle incl common/empty docs",
-    "real FTS probe + persisted backend + rebuild both directions",
-    "SQL brain_terms aggregation",
-    "FTS rowid deletion",
-    "dedupe/tie/limit/filter/stale-card/quoting coverage"
+    "SearchIndex owns/relinquishes BEGIN IMMEDIATE correctly on EventStore conn",
+    "32-term cap identical on both backends",
+    "public SearchIndex.rebuild() for post-VACUUM repair",
+    "valid_chat_id fullmatch rejects newline-suffixed IDs"
   ],
   "sha256": {
-    "sitecrew/store/search.py": "a51782c3c9358576adbdefbb7e7521d7be531b0df2bdb82b2eea269624afe299",
-    "tests/test_search.py": "9c1d2c2367709719b27313f93800e03a3b9c7bdc9b677e23a4ce1782b84539d8",
-    "tests/test_store_lint.py": "855cb35278fadeb49e57f01034fe26a2b4caaa7a3fc9ee63b1cddfb6c53cd36d"
+    "sitecrew/store/search.py": "f63d5a757ae7892f90c866352dcd4f783d57657c0c19e6ca57aadffb16596ff1",
+    "tests/test_search.py": "ef9f8697f36e5d75971320bedebe2de8a5f19f7a186735add34dd711ccb65aa9",
+    "tests/test_store_lint.py": "855cb35278fadeb49e57f01034fe26a2b4caaa7a3fc9ee63b1cddfb6c53cd36d",
+    "sitecrew/store/db.py": "32e73e1f86d35b21e23d300d272f3a51888c3243434d4bd3eb9ebb0a8b8dbbc8"
   }
 }

@@ -35,6 +35,16 @@ class ImportRegression(unittest.TestCase):
                          [imp.imp_id("m", "queue_json", 0, 0),
                           imp.imp_id("m", "queue_json", 0, 1),
                           imp.imp_id("qm", "queue_json", 0, 0)])
+        self.assertEqual(events[0]["data"], {
+            "text": "one", "role": "user", "kind": "user", "parent_id": None,
+            "origin": "import", "source": "queue_json"})
+        self.assertEqual(events[1]["data"]["parent_id"], events[0]["id"])
+        self.assertEqual((events[1]["data"]["role"], events[1]["data"]["kind"]),
+                         ("assistant", "assistant"))
+        self.assertNotIn("queued", events[0]["data"])
+        self.assertEqual(events[2]["data"], {
+            "text": "later", "role": "user", "kind": "user", "parent_id": None,
+            "origin": "import", "source": "queue_json", "queued": True})
         invariants = self.store.check_invariants()
         self.assertTrue(invariants["_pass"], invariants)
         before = self.store.head(cid)
@@ -107,6 +117,11 @@ class ImportRegression(unittest.TestCase):
         self.assertEqual(all_text.count("same"), 2)
         self.assertEqual(all_text.count("q same"), 2)
         events = self.store.events_after(cid, 0, 100)
+        transcript_events = [event for event in events
+                             if event["type"] == "message.created"
+                             and not event["data"].get("queued")]
+        self.assertEqual([event["data"]["parent_id"] for event in transcript_events],
+                         [None] + expected_chain[:-1])
         for source, chat in sources:
             source_events = [event for event in events
                              if event["data"].get("source") == source]
@@ -160,6 +175,9 @@ class ImportRegression(unittest.TestCase):
         imported = self.store.conn.execute(
             "SELECT parent_id FROM messages WHERE id=?", (imported_id,)).fetchone()
         self.assertEqual(imported["parent_id"], "live_2")
+        imported_event = self.store.conn.execute(
+            "SELECT data_json FROM events WHERE id=?", (imported_id,)).fetchone()
+        self.assertEqual(json.loads(imported_event["data_json"])["parent_id"], "live_2")
         chat_row = self.store.conn.execute(
             "SELECT * FROM chats WHERE id='c_live'").fetchone()
         self.assertEqual(chat_row["head_message_id"], imported_id)

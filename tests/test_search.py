@@ -12,6 +12,7 @@ from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sitecrew.store import db as sdb  # noqa: E402
+from sitecrew.store.events import EventStore  # noqa: E402
 from sitecrew.store.search import SearchIndex, ensure_search_backend  # noqa: E402
 
 NOW = 1800000000000
@@ -185,6 +186,15 @@ class SearchBackends(unittest.TestCase):
                 finally:
                     setattr(index, method, original)
                 self.assertEqual(seen, [["needle"]])
+
+    def test_3000_term_query_uses_same_32_term_cap_on_both_backends(self):
+        words = ["long%04d" % n for n in range(3000)]
+        for backend, index in self.indexes.items():
+            with self.subTest(backend=backend):
+                self.put(index, {"id": "e_long_query",
+                                 "title": " ".join(words[:32]), "body": ""})
+                hits = index.search(" ".join(words), now_ms=NOW)
+                self.assertEqual([hit["id"] for hit in hits], ["e_long_query"])
 
     def test_fallback_candidates_are_aggregated_in_sql(self):
         index = self.indexes["brain_terms"]
@@ -368,6 +378,43 @@ class BackendSwitching(unittest.TestCase):
         return self.conn.execute(
             "SELECT value FROM meta WHERE key='search_backend'").fetchone()[0]
 
+    def test_existing_caller_transaction_is_joined_not_committed(self):
+        self.conn.execute("BEGIN IMMEDIATE")
+        SearchIndex(self.conn)
+        self.assertTrue(self.conn.in_transaction)
+        self.conn.execute("ROLLBACK")
+        self.assertFalse(self.conn.in_transaction)
+
+    def test_public_rebuild_repairs_vacuum_rowid_drift_and_orphans(self):
+        index = SearchIndex(self.conn)
+        for n in range(3):
+            put_entry(index, {"id": "e_vac_%d" % n,
+                              "title": "survivor %d" % n, "body": "vacuum"})
+        index.delete("e_vac_0")
+        self.conn.execute("DELETE FROM brain_entries WHERE id='e_vac_0'")
+        self.conn.commit()
+        before = {row["id"]: row["rowid"] for row in self.conn.execute(
+            "SELECT id, rowid FROM brain_entries")}
+        self.conn.execute("VACUUM")
+        # VACUUM is permitted, but not required, to change rowids. Shift them
+        # explicitly so this test deterministically exercises the required repair.
+        self.conn.execute("UPDATE brain_entries SET rowid=rowid+10")
+        self.conn.commit()
+        after = {row["id"]: row["rowid"] for row in self.conn.execute(
+            "SELECT id, rowid FROM brain_entries")}
+        self.assertNotEqual(before, after)
+        orphans = self.conn.execute(
+            "SELECT COUNT(*) FROM brain_fts f LEFT JOIN brain_entries e"
+            " ON e.rowid=f.rowid WHERE e.id IS NULL").fetchone()[0]
+        self.assertGreater(orphans, 0)
+        index.rebuild()
+        self.assertFalse(self.conn.in_transaction)
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM brain_fts f LEFT JOIN brain_entries e"
+            " ON e.rowid=f.rowid WHERE e.id IS NULL").fetchone()[0], 0)
+        self.assertEqual({hit["id"] for hit in index.search("survivor", now_ms=NOW)},
+                         {"e_vac_1", "e_vac_2"})
+
     def test_pc_to_phone_to_pc_persists_choice_and_rebuilds_every_entry(self):
         pc = SearchIndex(self.conn)
         self.assertEqual(pc.backend, "fts5")
@@ -402,6 +449,35 @@ class BackendSwitching(unittest.TestCase):
         self.assertEqual(self.conn.execute(
             "SELECT COUNT(*) FROM sqlite_temp_master"
             " WHERE name LIKE 'brain_fts_probe%'").fetchone()[0], 0)
+
+
+class EventStoreIntegration(unittest.TestCase):
+    def test_search_open_and_switch_leave_eventstore_append_ready(self):
+        for initially_forced in (False, True):
+            with self.subTest(initially_forced=initially_forced):
+                tmp = tempfile.mkdtemp(prefix="sc_search_events_")
+                store = EventStore(os.path.join(tmp, "events.db"))
+                try:
+                    index = SearchIndex(store.conn, force_terms=initially_forced)
+                    self.assertFalse(store.conn.in_transaction)
+                    first = store.append("c_search", "system.import.chat",
+                                         {"stage": "initial"})
+                    self.assertEqual(first["seq"], 1)
+                    self.assertFalse(store.conn.in_transaction)
+
+                    put_entry(index, {"id": "e_event_integration",
+                                      "title": "integration", "body": "search"})
+                    store.conn.commit()
+                    switched = SearchIndex(
+                        store.conn, force_terms=not initially_forced)
+                    self.assertNotEqual(index.backend, switched.backend)
+                    self.assertFalse(store.conn.in_transaction)
+                    second = store.append("c_search", "system.import.chat",
+                                          {"stage": "switched"})
+                    self.assertEqual(second["seq"], 2)
+                    self.assertFalse(store.conn.in_transaction)
+                finally:
+                    store.close()
 
 
 if __name__ == "__main__":

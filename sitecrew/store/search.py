@@ -15,6 +15,7 @@ from . import db
 
 _TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 _DAY_MS = 86400000
+_MAX_QUERY_TERMS = 32
 
 
 def _tokens(value):
@@ -109,19 +110,29 @@ def ensure_search_backend(conn, force_terms=False):
     A changed selection is rebuilt from all brain_entries so a database can move
     in either direction between FTS5-capable and fallback-only runtimes.
     """
-    backend = "brain_terms" if force_terms or not _probe_fts5(conn) else "fts5"
-    if backend == "fts5":
-        conn.execute(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS brain_fts USING"
-            " fts5(title, body, tags, tokenize='unicode61 remove_diacritics 0')")
-    previous = conn.execute(
-        "SELECT value FROM meta WHERE key='search_backend'").fetchone()
-    if previous is None or previous[0] != backend:
-        _rebuild(conn, backend)
-        conn.execute(
-            "INSERT OR REPLACE INTO meta(key, value) VALUES('search_backend', ?)",
-            (backend,))
-    return backend
+    owns_transaction = not conn.in_transaction
+    if owns_transaction:
+        conn.execute("BEGIN IMMEDIATE")
+    try:
+        backend = "brain_terms" if force_terms or not _probe_fts5(conn) else "fts5"
+        if backend == "fts5":
+            conn.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS brain_fts USING"
+                " fts5(title, body, tags, tokenize='unicode61 remove_diacritics 0')")
+        previous = conn.execute(
+            "SELECT value FROM meta WHERE key='search_backend'").fetchone()
+        if previous is None or previous[0] != backend:
+            _rebuild(conn, backend)
+            conn.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES('search_backend', ?)",
+                (backend,))
+        if owns_transaction:
+            conn.execute("COMMIT")
+        return backend
+    except BaseException:
+        if owns_transaction and conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
 
 
 class SearchIndex:
@@ -134,6 +145,20 @@ class SearchIndex:
     def add(self, entry):
         """Index a brain_entries row (or its mapping); repeated adds replace terms."""
         _index_entry(self.conn, self.backend, _entry(self.conn, entry))
+
+    def rebuild(self):
+        """Rebuild the selected index; required after VACUUM changes entry rowids."""
+        owns_transaction = not self.conn.in_transaction
+        if owns_transaction:
+            self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            _rebuild(self.conn, self.backend)
+            if owns_transaction:
+                self.conn.execute("COMMIT")
+        except BaseException:
+            if owns_transaction and self.conn.in_transaction:
+                self.conn.execute("ROLLBACK")
+            raise
 
     def update(self, entry):
         """Refresh an existing row after its title, body, or tags change."""
@@ -149,8 +174,8 @@ class SearchIndex:
             self.conn.execute("DELETE FROM brain_terms WHERE entry_id=?", (entry_id,))
 
     def search(self, query, kinds=None, case_id=None, site=None, limit=8, now_ms=None):
-        """Return at most eight matching compact cards, best ranked first."""
-        terms = list(dict.fromkeys(_tokens(query)))
+        """Return ranked cards using the first 32 distinct normalized query terms."""
+        terms = list(dict.fromkeys(_tokens(query)))[:_MAX_QUERY_TERMS]
         if not terms:
             return []
         limit = max(0, min(int(limit), 8))
