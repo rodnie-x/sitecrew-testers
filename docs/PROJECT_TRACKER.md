@@ -75,7 +75,10 @@ owner decisions remain OPEN. In-app Claude remains logged out (owner action).
    are invalid because the sampler could refetch from cursor 0 and spin on errors;
    that defect is a credible explanation, not a measured root-cause observation.
    No CPU improvement or slice verdict may be claimed yet.
-2. **1468ms PC outlier** + per-request explanations for every >300ms phone
+2. **1468ms PC outlier**: diagnostic rerun latency was clean (200/200, p50 7ms,
+   p95 13ms, max 25ms, all wake reasons=events), so the old outlier did not reproduce
+   and is not root-caused. That combined diagnostic run FAILED reconnect count
+   (21 <100; DOM/cursors/loss passed) and is preserved separately, not as a new PASS.
    sample (missed-notify → 1s-belt wake is the standing hypothesis).
 3. **P1.3 device half** (GO given; the gate):
    - hot-deploy verification (last device-verified trio: api_v2 ccec4f56,
@@ -95,7 +98,12 @@ owner decisions remain OPEN. In-app Claude remains logged out (owner action).
    mapping now commits atomically with import state+event; synthetic smoke PASS
    12/12 chats, 41/41 messages, 12/12 queued including rerun/partial recovery
    (`reports/p11_importer_smoke.json`). The three real corpora and device import
-   remain NOT RUN. P1.5 mirror/flip remains TODO. Combined PC suite: 50/50 PASS.
+   remain NOT RUN. Review boss then ruled FIX FIRST: Unicode/BM25 parity and backend
+   rebuild fixes are in progress; imported-message invariants/ID mapping and an
+   overlap policy are also being resolved before real corpora. P1.5 architecture is
+   ruled (docs/P15_DESIGN_RULING.md); implementation remains TODO pending these
+   prerequisites. Earlier 50/50 PASS is historical for that revision, not current
+   review sign-off.
 6. **Phase 2** (order being drafted by the planning boss): engine core,
    ModelGateway (NVIDIA-only allowlist), tool contract + tiers + approval
    gates, Calm iOS shell — then the Phase 2 gate run.

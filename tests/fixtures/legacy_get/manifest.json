@@ -1,0 +1,414 @@
+{
+  "api_state_fixture_count": 8,
+  "fixture_definitions": [
+    {
+      "id": "static__root",
+      "kind": "static",
+      "method": "GET",
+      "route": "/",
+      "source": "server/static/index.html"
+    },
+    {
+      "id": "static__index_html",
+      "kind": "static",
+      "method": "GET",
+      "route": "/index.html",
+      "source": "server/static/index.html"
+    },
+    {
+      "id": "static__poll_js",
+      "kind": "static",
+      "method": "GET",
+      "route": "/poll.js",
+      "source": "server/static/poll.js"
+    },
+    {
+      "id": "static__poll_test_html",
+      "kind": "static",
+      "method": "GET",
+      "route": "/poll_test.html",
+      "source": "server/static/poll_test.html"
+    },
+    {
+      "id": "static__sc_bigtext_html",
+      "kind": "static",
+      "method": "GET",
+      "route": "/sc_bigtext.html",
+      "source": "server/static/sc_bigtext.html"
+    },
+    {
+      "id": "static__sc_test_html",
+      "kind": "static",
+      "method": "GET",
+      "route": "/sc_test.html",
+      "source": "server/static/sc_test.html"
+    },
+    {
+      "id": "static__sitecrew_css",
+      "kind": "static",
+      "method": "GET",
+      "route": "/sitecrew.css",
+      "source": "server/static/sitecrew.css"
+    },
+    {
+      "controls": {
+        "crew": null,
+        "network": false
+      },
+      "fixture": "empty",
+      "id": "api_state__empty",
+      "kind": "api_state",
+      "method": "GET",
+      "route": "/api/state"
+    },
+    {
+      "controls": {
+        "activity": 2,
+        "approvals": 1,
+        "crew": "tests.helpers.make_crew",
+        "messages": 2,
+        "network": false,
+        "usage": {
+          "fake/small": {
+            "calls": 2,
+            "completion_tokens": 7,
+            "prompt_tokens": 11
+          }
+        }
+      },
+      "fixture": "normal_full_metadata",
+      "id": "api_state__normal_full_metadata",
+      "kind": "api_state",
+      "method": "GET",
+      "route": "/api/state"
+    },
+    {
+      "controls": {
+        "event_time_freeze": "12:34:56",
+        "mutation": "POST /api/chat with one deterministic offline message",
+        "network": false,
+        "queue_file": "temporary directory"
+      },
+      "fixture": "queued",
+      "id": "api_state__queued",
+      "kind": "api_state",
+      "method": "GET",
+      "route": "/api/state"
+    },
+    {
+      "controls": {
+        "mutation": "prepare_attachments + _user_message",
+        "network": false,
+        "private_fields_expected_on_server": [
+          "model_content"
+        ],
+        "private_fields_forbidden_in_response": [
+          "model_content",
+          "attachments[].text"
+        ]
+      },
+      "fixture": "attachment_model_content_stripped",
+      "id": "api_state__attachment_model_content_stripped",
+      "kind": "api_state",
+      "method": "GET",
+      "route": "/api/state"
+    },
+    {
+      "controls": {
+        "mutation": "POST /api/restore with hostile model_content and attachment text",
+        "network": false
+      },
+      "fixture": "restored",
+      "id": "api_state__restored",
+      "kind": "api_state",
+      "method": "GET",
+      "route": "/api/state"
+    },
+    {
+      "controls": {
+        "expected_messages": 60,
+        "input_messages": 65,
+        "network": false
+      },
+      "fixture": "messages_over_60",
+      "id": "api_state__messages_over_60",
+      "kind": "api_state",
+      "method": "GET",
+      "route": "/api/state"
+    },
+    {
+      "controls": {
+        "expected_activity": 100,
+        "input_activity": 125,
+        "network": false
+      },
+      "fixture": "activity_over_100",
+      "id": "api_state__activity_over_100",
+      "kind": "api_state",
+      "method": "GET",
+      "route": "/api/state"
+    },
+    {
+      "controls": {
+        "busy": true,
+        "busy_since_freeze": 1700000000.25,
+        "network": false
+      },
+      "fixture": "busy_offline",
+      "id": "api_state__busy_offline",
+      "kind": "api_state",
+      "method": "GET",
+      "route": "/api/state"
+    }
+  ],
+  "fixture_definitions_sha256": "17c48285f84576fcf908494791e815243766762a3b6778ac8360f4fba6fb184c",
+  "format": 1,
+  "legacy_get_count": 15,
+  "normalization": {
+    "body_policy": "exact bytes; event time and busy_since are frozen by fixtures",
+    "body_replacements": [],
+    "ignored_headers": {
+      "Date": "HTTP response wall clock",
+      "ETag": "Flask file validator incorporates the source file mtime",
+      "Last-Modified": "source file mtime is not stable across checkouts"
+    },
+    "json_pointer_replacements": [],
+    "version": 1
+  },
+  "normalization_sha256": "3bc472effd484a57b7518223a259b91526392e4416766f2798b664a859513ac3",
+  "purpose": "P1.5 pre-route legacy GET baseline; no mirror or flip",
+  "responses": [
+    {
+      "body_bytes": 64022,
+      "body_file": "bodies/static__root.bin",
+      "body_sha256": "64e00e6dbdcab2c4440a46d78e82e6f766a1949d419d5542b575e29543090e74",
+      "fixture": null,
+      "headers": {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache",
+        "Content-Disposition": "inline; filename=index.html",
+        "Content-Length": "64022",
+        "Content-Type": "text/html; charset=utf-8"
+      },
+      "id": "static__root",
+      "method": "GET",
+      "route": "/",
+      "status": 200
+    },
+    {
+      "body_bytes": 64022,
+      "body_file": "bodies/static__index_html.bin",
+      "body_sha256": "64e00e6dbdcab2c4440a46d78e82e6f766a1949d419d5542b575e29543090e74",
+      "fixture": null,
+      "headers": {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache",
+        "Content-Disposition": "inline; filename=index.html",
+        "Content-Length": "64022",
+        "Content-Type": "text/html; charset=utf-8"
+      },
+      "id": "static__index_html",
+      "method": "GET",
+      "route": "/index.html",
+      "status": 200
+    },
+    {
+      "body_bytes": 7139,
+      "body_file": "bodies/static__poll_js.bin",
+      "body_sha256": "0b8554f5ce1818f79e7c5551bfb9102ce997fdbca4a4a6c89a498a52244d8425",
+      "fixture": null,
+      "headers": {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache",
+        "Content-Disposition": "inline; filename=poll.js",
+        "Content-Length": "7139",
+        "Content-Type": "text/javascript; charset=utf-8"
+      },
+      "id": "static__poll_js",
+      "method": "GET",
+      "route": "/poll.js",
+      "status": 200
+    },
+    {
+      "body_bytes": 5000,
+      "body_file": "bodies/static__poll_test_html.bin",
+      "body_sha256": "f8ccdebf37efc5915b76c4ef9727b5c24f73d3ff145aad722b83996c88789fe1",
+      "fixture": null,
+      "headers": {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache",
+        "Content-Disposition": "inline; filename=poll_test.html",
+        "Content-Length": "5000",
+        "Content-Type": "text/html; charset=utf-8"
+      },
+      "id": "static__poll_test_html",
+      "method": "GET",
+      "route": "/poll_test.html",
+      "status": 200
+    },
+    {
+      "body_bytes": 2951,
+      "body_file": "bodies/static__sc_bigtext_html.bin",
+      "body_sha256": "0ba3eb56e08fc10a7458d1276e520535e55be5a5a4e4c9c865f550d372d55c7f",
+      "fixture": null,
+      "headers": {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache",
+        "Content-Disposition": "inline; filename=sc_bigtext.html",
+        "Content-Length": "2951",
+        "Content-Type": "text/html; charset=utf-8"
+      },
+      "id": "static__sc_bigtext_html",
+      "method": "GET",
+      "route": "/sc_bigtext.html",
+      "status": 200
+    },
+    {
+      "body_bytes": 2757,
+      "body_file": "bodies/static__sc_test_html.bin",
+      "body_sha256": "c47ff9e6ec935d0ea8b6f9be78aac01154e734bf9f6a50b3dfdc441aca497ade",
+      "fixture": null,
+      "headers": {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache",
+        "Content-Disposition": "inline; filename=sc_test.html",
+        "Content-Length": "2757",
+        "Content-Type": "text/html; charset=utf-8"
+      },
+      "id": "static__sc_test_html",
+      "method": "GET",
+      "route": "/sc_test.html",
+      "status": 200
+    },
+    {
+      "body_bytes": 44704,
+      "body_file": "bodies/static__sitecrew_css.bin",
+      "body_sha256": "072279f130b837cdf1835e30ba090ae024342539affa9c2a62a81096be900e03",
+      "fixture": null,
+      "headers": {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache",
+        "Content-Disposition": "inline; filename=sitecrew.css",
+        "Content-Length": "44704",
+        "Content-Type": "text/css; charset=utf-8"
+      },
+      "id": "static__sitecrew_css",
+      "method": "GET",
+      "route": "/sitecrew.css",
+      "status": 200
+    },
+    {
+      "body_bytes": 187,
+      "body_file": "bodies/api_state__empty.bin",
+      "body_sha256": "20fbd89ed118348558cb8ebb39448e3679fcc70fa610fe15ff9dfd667896ce14",
+      "fixture": "empty",
+      "headers": {
+        "Content-Length": "187",
+        "Content-Type": "application/json"
+      },
+      "id": "api_state__empty",
+      "method": "GET",
+      "route": "/api/state",
+      "status": 200
+    },
+    {
+      "body_bytes": 1013,
+      "body_file": "bodies/api_state__normal_full_metadata.bin",
+      "body_sha256": "d31fe2da2aee344d6c1f9d91cc2f68736c572d4ad8705d4cf5bcd9dc2e7626dc",
+      "fixture": "normal_full_metadata",
+      "headers": {
+        "Content-Length": "1013",
+        "Content-Type": "application/json"
+      },
+      "id": "api_state__normal_full_metadata",
+      "method": "GET",
+      "route": "/api/state",
+      "status": 200
+    },
+    {
+      "body_bytes": 387,
+      "body_file": "bodies/api_state__queued.bin",
+      "body_sha256": "ac9c8af8089e27b97412473faa20fdc465aee61e8a2649afbdb12274e9f50fde",
+      "fixture": "queued",
+      "headers": {
+        "Content-Length": "387",
+        "Content-Type": "application/json"
+      },
+      "id": "api_state__queued",
+      "method": "GET",
+      "route": "/api/state",
+      "status": 200
+    },
+    {
+      "body_bytes": 406,
+      "body_file": "bodies/api_state__attachment_model_content_stripped.bin",
+      "body_sha256": "f54528aeaa3917b7540ab1e7f64596719dcded6d6f8848fc22911808f65de84e",
+      "fixture": "attachment_model_content_stripped",
+      "headers": {
+        "Content-Length": "406",
+        "Content-Type": "application/json"
+      },
+      "id": "api_state__attachment_model_content_stripped",
+      "method": "GET",
+      "route": "/api/state",
+      "status": 200
+    },
+    {
+      "body_bytes": 380,
+      "body_file": "bodies/api_state__restored.bin",
+      "body_sha256": "b7f781421d8617413950e94095ddd99108fa41cb5181c5c8d127c136409c4bb6",
+      "fixture": "restored",
+      "headers": {
+        "Content-Length": "380",
+        "Content-Type": "application/json"
+      },
+      "id": "api_state__restored",
+      "method": "GET",
+      "route": "/api/state",
+      "status": 200
+    },
+    {
+      "body_bytes": 3571,
+      "body_file": "bodies/api_state__messages_over_60.bin",
+      "body_sha256": "cd6ea90fa4589fe72fdf17444e5d17f21c2b6c662c255c76f4364823a735a2fa",
+      "fixture": "messages_over_60",
+      "headers": {
+        "Content-Length": "3571",
+        "Content-Type": "application/json"
+      },
+      "id": "api_state__messages_over_60",
+      "method": "GET",
+      "route": "/api/state",
+      "status": 200
+    },
+    {
+      "body_bytes": 14911,
+      "body_file": "bodies/api_state__activity_over_100.bin",
+      "body_sha256": "600cfa31c5660f9fa799dac359866a8f1b35bc5167ce12ed049c3943189b634f",
+      "fixture": "activity_over_100",
+      "headers": {
+        "Content-Length": "14911",
+        "Content-Type": "application/json"
+      },
+      "id": "api_state__activity_over_100",
+      "method": "GET",
+      "route": "/api/state",
+      "status": 200
+    },
+    {
+      "body_bytes": 239,
+      "body_file": "bodies/api_state__busy_offline.bin",
+      "body_sha256": "47a909989abf0e6bf617f6d72d1654d5613582837023f942f545e079b5b4db05",
+      "fixture": "busy_offline",
+      "headers": {
+        "Content-Length": "239",
+        "Content-Type": "application/json"
+      },
+      "id": "api_state__busy_offline",
+      "method": "GET",
+      "route": "/api/state",
+      "status": 200
+    }
+  ],
+  "static_get_count": 7
+}

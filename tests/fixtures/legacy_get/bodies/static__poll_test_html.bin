@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SiteCrew poll test</title>
+<style>
+  body { font: 13px/1.4 system-ui, sans-serif; margin: 12px; }
+  #status { color: #555; margin-bottom: 8px; }
+  ol { margin: 0 0 12px; padding-left: 0; list-style: none; }
+  li { font: 11px/1.3 ui-monospace, monospace; word-break: break-all; padding: 1px 0; }
+  h3 { margin: 10px 0 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<!--
+  P1.3 test page. Serve it only when SITECREW_TEST=1.
+  Query: ?streams=c_a:0,office:0   streams to follow (default office:0)
+         &expect=500               stop and report once this many events were applied
+         &chaos=0.5                TEST ONLY: probability of aborting a request mid-flight (forced reconnect)
+         &wait=25                  long-poll seconds
+         &idle=8                   report after this many seconds without a new event (if expect is unset)
+  The DOM is a pure function of the reducer state (no clocks, no random ids), so DOM equality between an
+  uninterrupted run and a forced-reconnect run is a plain hash comparison: window.__result().dom.hash.
+  Latency = receive time - envelope ts (ts is stamped inside append just before COMMIT, so the figure
+  includes commit time: conservative). Same device clock for server and page, so no skew.
+-->
+<div id="status">starting...</div>
+<div id="root"></div>
+<script src="poll.js"></script>
+<script>
+(function () {
+  "use strict";
+  var q = new URLSearchParams(location.search);
+  var streams = {};
+  (q.get("streams") || "office:0").split(",").forEach(function (p) {
+    var a = p.split(":"); if (a[0]) streams[a[0]] = parseInt(a[1] || "0", 10);
+  });
+  var expect = parseInt(q.get("expect") || "0", 10);
+  var idleS = parseFloat(q.get("idle") || "8");
+  var chaos = q.get("chaos") ? { p: parseFloat(q.get("chaos")), maxMs: 300 } : null;
+
+  var state = { streams: {} };
+  Object.keys(streams).forEach(function (s) { state.streams[s] = { seq: streams[s], items: [] }; });
+  var lat = [], applied = 0, lastEventAt = Date.now(), reported = false;
+  var statusEl = document.getElementById("status"), rootEl = document.getElementById("root");
+
+  function render() {
+    var html = Object.keys(state.streams).sort().map(function (s) {
+      var st = state.streams[s];
+      return "<h3>" + s + " (" + st.seq + ")</h3><ol data-stream=\"" + s + "\">" +
+        st.items.map(function (it) {
+          return "<li data-seq=\"" + it.seq + "\">" + it.seq + " " + it.type + " " +
+            it.text.replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</li>";
+        }).join("") + "</ol>";
+    }).join("");
+    rootEl.innerHTML = html;                                     // deterministic: state in, DOM out
+  }
+
+  var scheduled = false;
+  function scheduleRender() {
+    if (scheduled) return; scheduled = true;
+    requestAnimationFrame(function () { scheduled = false; render(); });
+  }
+
+  function pct(a, p) { return a.length ? a[Math.min(a.length - 1, Math.floor(p * a.length))] : null; }
+  function result() {
+    render();                                                    // make sure DOM reflects the final state
+    var s = lat.slice().sort(function (x, y) { return x - y; });
+    var perStream = {};
+    Object.keys(state.streams).forEach(function (k) { perStream[k] = state.streams[k].seq; });
+    return {
+      applied: applied, stats: client.stats, heads: perStream,
+      dom: { hash: SiteCrewPoll.hash(rootEl.innerHTML), length: rootEl.innerHTML.length },
+      latency_ms: { n: s.length, min: s[0], p50: pct(s, 0.5), p95: pct(s, 0.95), p99: pct(s, 0.99), max: s[s.length - 1] }
+    };
+  }
+  window.__result = result;
+
+  function report() {
+    if (reported) return; reported = true;
+    client.stop();
+    var body = JSON.stringify(result());
+    statusEl.textContent = "done: " + applied + " events";
+    fetch("/api/v2/_test/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: body })
+      .catch(function () { /* the harness can also read window.__result() */ });
+  }
+
+  var client = SiteCrewPoll.create({
+    streams: streams, chaos: chaos, wait: parseFloat(q.get("wait") || "25"),
+    onEvents: function (stream, events) {
+      var now = Date.now();
+      events.forEach(function (e) {
+        SiteCrewPoll.reduceEvent(state, e);
+        lat.push(Math.max(0, now - e.ts));
+        applied++;
+      });
+      lastEventAt = now;
+      scheduleRender();
+      statusEl.textContent = "applied " + applied + " | polls " + client.stats.polls + " | forced " + client.stats.forced;
+      if (expect && applied >= expect) report();
+    },
+    onReset: function (stream, head) {
+      state.streams[stream] = { seq: head, items: [] };          // restart that stream from the new head
+      scheduleRender();
+    }
+  });
+  client.start();
+  if (!expect) setInterval(function () { if (Date.now() - lastEventAt > idleS * 1000) report(); }, 500);
+})();
+</script>
+</body>
+</html>

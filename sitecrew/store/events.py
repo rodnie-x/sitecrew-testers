@@ -147,6 +147,49 @@ class EventStore:
                 self._cond.notify_all()
         return self.envelope_for(stream, seq)
 
+    def append_batch(self, stream, items, state_writer=None, strict=False):
+        """Write one state change and its ordered events in ONE transaction.
+
+        Each item is a mapping with type/data and optional id, ts, turn_id, case_id,
+        task_id, run_id, agent and site. state_writer(conn, first_seq) runs before
+        the events. Sequence allocation, locking and notification match append().
+        """
+        items = list(items)
+        if not items:
+            raise ValueError("append_batch requires at least one event")
+        if strict:
+            for item in items:
+                if not db.event_type_known(item["type"]):
+                    raise ValueError("unknown event type: %r" % item["type"])
+        with self._writer:
+            with self._cond:
+                self.conn.execute("BEGIN IMMEDIATE")
+                committed = False
+                try:
+                    first_seq = self._next_seq(self.conn, stream)
+                    if state_writer is not None:
+                        state_writer(self.conn, first_seq)
+                    for offset, item in enumerate(items):
+                        self.conn.execute(
+                            "INSERT INTO events(chat_id, seq, id, turn_id, type, data_json,"
+                            " ts, case_id, task_id, run_id, agent, site)"
+                            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (stream, first_seq + offset, item.get("id") or db.new_id("e"),
+                             item.get("turn_id"), item["type"], db.dumps(item["data"]),
+                             item["ts"] if item.get("ts") is not None else db.utc_ms(),
+                             item.get("case_id"), item.get("task_id"), item.get("run_id"),
+                             item.get("agent"), item.get("site")))
+                    self.conn.execute("COMMIT")
+                    committed = True
+                except BaseException:
+                    if not committed and self.conn.in_transaction:
+                        self.conn.execute("ROLLBACK")
+                    raise
+                self._heads[stream] = first_seq + len(items) - 1
+                self._cond.notify_all()
+        return [self.envelope_for(stream, first_seq + offset)
+                for offset in range(len(items))]
+
     def envelope_for(self, stream, seq):
         row = self._read.execute(
             "SELECT * FROM events WHERE chat_id=? AND seq=?", (stream, seq)).fetchone()

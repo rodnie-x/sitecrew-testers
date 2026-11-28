@@ -101,9 +101,10 @@ def make_blueprint(get_store, max_parked=8):
     _supersede = {}
     _sup_lock = threading.Lock()
     _SUP_MAX = 256                                      # bound the registry (LRU-ish by insertion)
+    wake_counts = {key: 0 for key in ("events", "more", "timeout", "cid-superseded", "disconnected")}
 
 
-    def reply(obj, status=200, retry_after=None, liveness_path=None):
+    def reply(obj, status=200, retry_after=None, liveness_path=None, wake_reason=None):
         resp = jsonify(obj)
         resp.status_code = status
         resp.headers["Cache-Control"] = "no-store"
@@ -111,6 +112,10 @@ def make_blueprint(get_store, max_parked=8):
             resp.headers["X-Liveness-Path"] = liveness_path
         if retry_after:
             resp.headers["Retry-After"] = str(retry_after)
+        if wake_reason:
+            resp.headers["X-Wake-Reason"] = wake_reason
+            with _sup_lock:
+                wake_counts[wake_reason] += 1
         return resp
 
     @bp.get("/poll")
@@ -155,18 +160,20 @@ def make_blueprint(get_store, max_parked=8):
                 result = store.poll(cursors, wait=slice_wait)
                 events = result.get("events") or []
                 if events or result.get("more"):
-                    return reply(result, liveness_path=live_path)
+                    return reply(result, liveness_path=live_path,
+                                 wake_reason="events" if events else "more")
                 if wait_left <= 0:
-                    return reply(result, liveness_path=live_path)
+                    return reply(result, liveness_path=live_path, wake_reason="timeout")
                 if my_gen is not None:
                     with _sup_lock:
                         if _supersede.get(cid) != my_gen:
                             log.debug("poll superseded by a newer cid request")
-                            return reply(result, liveness_path="cid-superseded")
+                            return reply(result, liveness_path="cid-superseded",
+                                         wake_reason="cid-superseded")
                 gone, path = _client_gone(request)
                 if gone:
                     log.debug("poll client disconnected; freeing slot early")
-                    return reply(result, liveness_path=path)
+                    return reply(result, liveness_path=path, wake_reason="disconnected")
         except Exception:
             log.exception("poll failed")
             return reply({"error": "internal"}, 500)

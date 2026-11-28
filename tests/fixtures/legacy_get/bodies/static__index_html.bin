@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#141517" id="metaTheme">
+<title>SiteCrew AI</title>
+<link rel="stylesheet" href="/sitecrew.css">
+<!-- SiteCrew field-operations design system lives in sitecrew.css -->
+</head>
+<body class="fresh">
+<div id="app">
+
+  <!-- ======== sidebar / drawer ======== -->
+  <aside id="drawer">
+    <div class="brand">
+      <span class="crew-mark" aria-hidden="true">SC</span>
+      <span><b>SiteCrew</b><small>Field operations</small></span>
+      <button class="side-toggle" id="sideCollapse" aria-label="Hide sidebar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+    </div>
+    <button class="newchat" id="newChatBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New chat
+    </button>
+    <button class="side-nav" id="searchBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      Search chats
+    </button>
+    <div id="searchWrap" hidden><input id="searchInp" placeholder="Search your chats…" autocomplete="off"></div>
+    <button class="side-nav" id="crewBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9m5 10V5m6 14v-7m5 7V3"/></svg>
+      Crew activity
+    </button>
+    <button class="side-nav" id="toolsBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M9 5h6M11 18h2"/></svg>
+      Phone tools
+    </button>
+    <button class="side-nav" id="dataBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v13H4zM3 3h18v4H3zM9 11h6"/></svg>
+      Data &amp; export
+    </button>
+    <div class="side-label">Chats</div>
+    <div id="recents"></div>
+    <div class="side-foot">
+      <button class="profile-btn" id="settingsBtn">
+        <span class="profile-avatar">SC</span>
+        <span class="pname">SiteCrew<small>Local AI crew</small></span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4l1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <div id="keyState"></div>
+    </div>
+  </aside>
+  <div id="scrim"></div>
+
+  <!-- ======== main column ======== -->
+  <div id="main">
+    <header>
+      <button class="hbtn" id="menuBtn" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="h-titlebox" style="min-width:0">
+        <div class="h-title" id="chatTitle">New chat</div>
+        <div class="h-sub" id="mode">connecting…</div>
+      </div>
+      <div class="h-spacer"></div>
+      <div id="status"><span class="dot"></span><span id="statusTxt">crew online</span></div>
+      <button class="hbtn" id="shareBtn" aria-label="Export conversation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V3m-4 4l4-4 4 4M5 13v7h14v-7"/></svg>
+        Export
+      </button>
+      <button class="hbtn" id="gearBtn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.03 1.56V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.11-1.56 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.56-1.03H3a2 2 0 110-4h.09a1.7 1.7 0 001.56-1.11 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34h.08a1.7 1.7 0 001.03-1.56V3a2 2 0 114 0v.09a1.7 1.7 0 001.03 1.56h.08a1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87v.08a1.7 1.7 0 001.56 1.03H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.56 1.03z"/></svg>
+      </button>
+    </header>
+
+    <div id="crewStrip" aria-label="Crew status — tap for the activity log"></div>
+
+    <section id="scroll" class="col">
+      <div id="chat"></div>
+      <div id="empty">
+        <div class="site-stamp"><span>SC</span>Work order · local device</div>
+        <h1 id="greet">Give the crew a job.</h1>
+        <p>Route questions to free NVIDIA models, read files, or use approved phone tools. Nothing sensitive runs without your say-so.</p>
+        <div class="chips">
+          <button class="chip" data-q="Check my battery level and tell me if I should charge soon.">Check battery and advise</button>
+          <button class="chip" data-q="Read the attached report and give me a one-paragraph brief.">Brief me on a document</button>
+          <button class="chip" data-q="What phone tools can you use right now? List them and what each one does.">Tour my phone tools</button>
+          <button class="chip" data-q="Summarize this conversation so far in three work-order notes.">Summarize the current job</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="composerWrap">
+      <button id="scrollBtn" class="hidden" aria-label="Scroll to latest"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
+      <div class="col">
+        <div id="keySetup" class="card" style="display:none">
+          <h3>Add your NVIDIA key</h3>
+          <p class="mut">Free key at <b>build.nvidia.com</b> — it stays on this device only.</p>
+          <div class="keyrow">
+            <input id="keyInp" placeholder="nvapi-…" autocomplete="off" spellcheck="false">
+            <button id="keySave">Save</button>
+          </div>
+          <div id="keyMsg" class="mut" style="margin-top:8px"></div>
+        </div>
+        <div id="approvalSlot"></div>
+        <input type="file" id="fileInput" multiple>
+        <div id="attachmentList" aria-live="polite"></div>
+        <div class="composer">
+          <div class="composer-tabs">
+            <div class="mode-switch" aria-label="Chat mode">
+              <button class="on" id="chatModeBtn">Message</button>
+              <button id="crewModeBtn">Activity</button>
+            </div>
+          </div>
+          <textarea id="inp" rows="1" placeholder="Describe the job, or attach a file." aria-label="Message SiteCrew AI"></textarea>
+          <div class="composer-bar">
+            <button class="cbtn" id="attachBtn" aria-label="Attach files or open chat tools" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div class="composer-spacer"></div>
+            <button class="cbtn" id="modelBtn" aria-label="View crew models">NVIDIA Crew</button>
+            <button class="cbtn" id="micBtn" aria-label="Dictate a message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>
+            </button>
+            <button class="cbtn" id="voiceBtn" aria-label="Use voice mode">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 10v4m4-7v10m4-13v16m4-13v10m4-7v4"/></svg>
+            </button>
+            <button id="send" aria-label="Send message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="attachMenu" role="menu">
+          <button id="uploadBtn" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.5 8.5a6 6 0 01-8.5-8.5l9-9a4 4 0 015.7 5.7l-9 9a2 2 0 01-2.9-2.8l8.4-8.4"/></svg>
+            <span class="am-label">Upload files</span>
+            <span class="am-hint">Ctrl+U</span>
+          </button>
+          <div class="attach-separator"></div>
+          <button data-open="tools" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+            <span class="am-label">Phone tools</span>
+            <span class="am-chevron">›</span>
+          </button>
+          <button data-open="crew" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10m6 9V5m6 14v-7m5 7V8"/></svg>
+            <span class="am-label">Crew activity</span>
+            <span class="am-chevron">›</span>
+          </button>
+          <button data-open="data" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-4-4 4 4 4-4M4 17v4h16v-4"/></svg>
+            <span class="am-label">Export conversation</span>
+            <span class="am-chevron">›</span>
+          </button>
+        </div>
+        <div class="composer-note"><span>Sensitive phone actions always ask first.</span><button id="modelNote">NVIDIA Crew</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== crew sheet ======== -->
+<div class="sheet-scrim" id="sheetScrim"></div>
+<div class="sheet" id="crewSheet">
+  <div class="sheet-head">
+    <b>Crew activity</b>
+    <div class="h-spacer"></div>
+    <button class="hbtn sheet-close" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body">
+    <div class="set-label">Workload — tokens per model</div>
+    <div id="usage"></div>
+    <div class="set-label">Site activity</div>
+    <div id="activity" class="card" style="padding:4px 14px"></div>
+  </div>
+</div>
+
+<!-- ======== settings sheet ======== -->
+<div class="sheet" id="settingsSheet">
+  <div class="sheet-head">
+    <b>Settings</b>
+    <div class="h-spacer"></div>
+    <button class="hbtn sheet-close" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="settings-main">
+  <div class="stabs" id="setTabs">
+    <div class="settings-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="settingsSearch" placeholder="Search settings" autocomplete="off">
+    </div>
+    <button class="stab on" data-tab="general">General</button>
+    <button class="stab" data-tab="appearance">Appearance</button>
+    <button class="stab" data-tab="crew">Crew</button>
+    <button class="stab" data-tab="tools">Tools</button>
+    <button class="stab" data-tab="data">Data</button>
+    <button class="stab" data-tab="about">About</button>
+  </div>
+  <div class="sheet-body">
+    <div class="settings-empty" id="settingsEmpty">No settings match your search.</div>
+
+    <div class="spane on" data-pane="general">
+      <div class="set-label">Chat</div>
+      <div class="card" style="padding:4px 16px">
+        <div class="setrow">
+          <span>Send with Enter<span class="d">Off = Enter makes a new line</span></span>
+          <label class="switch"><input type="checkbox" id="optEnter"><span class="slider"></span></label>
+        </div>
+        <div class="setrow">
+          <span>Haptic feedback<span class="d">Buzz on approvals and crew events</span></span>
+          <label class="switch"><input type="checkbox" id="optHaptics"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="set-label">NVIDIA key</div>
+      <div class="card">
+        <div id="keyState2" class="mut" style="margin-bottom:10px"></div>
+        <div class="keyrow">
+          <input id="keyInp2" placeholder="nvapi-… (paste to replace)" autocomplete="off" spellcheck="false">
+          <button id="keySave2">Save</button>
+        </div>
+        <div id="keyMsg2" class="mut" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div class="spane" data-pane="appearance">
+      <div class="set-label">General</div>
+      <div class="setrow"><span>Theme</span><div class="seg" id="themeSeg">
+        <button data-t="system" title="System">System</button>
+        <button data-t="light" title="Light">Light</button>
+        <button data-t="dark" title="Dark">Dark</button>
+      </div></div>
+      <div class="setrow"><span>Text size<span class="d">Size of the interface and conversations</span></span><div class="seg" id="fontSeg">
+        <button data-f="13">Small</button><button data-f="14">Default</button><button data-f="16">Large</button>
+      </div></div>
+      <div class="setrow"><span>Response font<span class="d">Font used for AI answers</span></span><div class="seg" id="responseFontSeg">
+        <button data-rf="serif">Serif</button><button data-rf="sans">Sans</button>
+      </div></div>
+      <div class="set-label">Accessibility</div>
+      <div class="setrow"><span>Reduce motion<span class="d">Minimize animations throughout the app</span></span>
+        <label class="switch"><input type="checkbox" id="optMotion"><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <div class="spane" data-pane="crew">
+      <div class="set-label">Roles &amp; models</div>
+      <div id="models" class="card mut"></div>
+      <div class="set-label">Workload — tokens per model</div>
+      <div id="usage2"></div>
+    </div>
+
+    <div class="spane" data-pane="tools">
+      <div class="set-label">Phone tools</div>
+      <div id="tools" class="card" style="padding:4px 16px"></div>
+      <p class="mut" style="margin:10px 2px 0">Sensitive tools always show an approval card in the chat before anything runs.</p>
+    </div>
+
+    <div class="spane" data-pane="data">
+      <div class="set-label">Conversation</div>
+      <div class="card">
+        <button class="btn-soft" id="exportBtn" style="margin-bottom:10px">Export as JSON</button>
+        <button class="btn-danger" id="clear">Clear current conversation</button>
+      </div>
+      <p class="mut" style="margin:10px 2px 0">Conversations are saved to Recents automatically as you chat, so nothing is lost. Recents are stored only in this browser. Your NVIDIA key stays in the app's private storage on this device.</p>
+    </div>
+
+    <div class="spane" data-pane="about">
+      <div class="set-label">SiteCrew AI</div>
+      <div class="card">
+        <p style="margin:0 0 8px; font-size:14px">Your personal AI crew, working like a construction site — a Foreman routes every request, the Engineer plans complex jobs, Laborers carry them out, the Inspector checks the work and the Storekeeper keeps memory lean.</p>
+        <p class="mut" style="margin:0">Version 0.1 · runs fully on this device · talks only to build.nvidia.com</p>
+      </div>
+    </div>
+
+  </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+const ICONS = {foreman:"FM", engineer:"EN", laborer:"LB", operator:"OP", inspector:"QA", storekeeper:"SK", site:"SITE", reminder:"REM"};
+const icon = w => ICONS[w] || "CREW";
+const SPARK = '<span class="role-code">SC</span>';
+const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg>';
+
+function esc(s){ const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+function lsGet(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : v; } catch(e){ return d; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+/* ---------- tiny markdown (safe: escapes first, then adds tags) ---------- */
+function md(src){
+  let s = esc(src);
+  s = s.replace(/```[a-zA-Z0-9_-]*\n?([\s\S]*?)```/g, (m, c) => "<pre><code>" + c.replace(/\n+$/, "") + "</code></pre>");
+  s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  s = s.replace(/^### (.*)$/gm, "<h3>$1</h3>").replace(/^## (.*)$/gm, "<h2>$1</h2>").replace(/^# (.*)$/gm, "<h1>$1</h1>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  s = s.replace(/(^|\n)((?:[-•] .*(?:\n|$))+)/g, (m, p, block) =>
+    p + "<ul>" + block.trim().split(/\n/).map(l => "<li>" + l.replace(/^[-•] /, "") + "</li>").join("") + "</ul>");
+  s = s.replace(/(^|\n)((?:\d{1,2}\. .*(?:\n|$))+)/g, (m, p, block) =>
+    p + "<ol>" + block.trim().split(/\n/).map(l => "<li>" + l.replace(/^\d{1,2}\. /, "") + "</li>").join("") + "</ol>");
+  /* Newlines that hug a block tag (h1-h3/ul/ol/pre) are dropped — the blocks have
+     their own margins, and keeping them painted phantom gaps under white-space.
+     Every remaining newline becomes <br> so .bot-content can stay white-space:normal
+     (pre-wrap collapsed-HTML replies also carried those gaps). Code blocks are split
+     out first: <pre> keeps its raw newlines and escaped content can't match tags. */
+  s = s.split(/(<pre>[\s\S]*?<\/pre>)/).map((part, i) => i % 2 ? part :
+    part.replace(/(<\/(?:h[1-3]|ul|ol)>)\n/g, "$1")
+        .replace(/\n(?=<(?:h[1-3]|ul|ol|li|pre)[\s>])/g, "")
+        .replace(/\n/g, "<br>")).join("");
+  return s;
+}
+
+/* ---------- settings state ---------- */
+const isPhone = matchMedia("(pointer: coarse)").matches;
+let themeMode = lsGet("sc_theme", "system");
+let fontSize  = parseFloat(lsGet("sc_font", "14"));
+let sendEnter = lsGet("sc_enter", isPhone ? "0" : "1") === "1";
+let haptics   = lsGet("sc_haptics", "1") === "1";
+let responseFont = lsGet("sc_response_font", "serif");
+let reduceMotion = lsGet("sc_reduce_motion", "0") === "1";
+
+function resolvedTheme(){
+  if (themeMode !== "system") return themeMode;
+  try { return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; } catch(e){ return "dark"; }
+}
+function applyTheme(){
+  const t = resolvedTheme();
+  const root = document.documentElement;
+  root.setAttribute("data-theme", t);
+  $("#metaTheme").content = (t === "dark") ? "#141517" : "#f1f2ed";
+  $$("#themeSeg button").forEach(b => b.classList.toggle("on", b.dataset.t === themeMode));
+  lsSet("sc_theme", themeMode);
+  /* Chromium (this WebView included) misses targeted style invalidation after an
+     attribute flip on <html>: elements with `transition: background-color ...`
+     keep painting the OLD theme's var() colors until an unrelated DOM mutation
+     forces a recalc. A FRESH style-element insertion guarantees a full recalc
+     (reusing the element is not enough), and the kill rule stops transitions
+     from animating from the stale targets. */
+  const old = document.getElementById("theme-kill");
+  if (old) old.remove();
+  const kill = document.createElement("style");
+  kill.id = "theme-kill";
+  kill.textContent = "*,*:before,*:after{transition:none!important}";
+  document.head.appendChild(kill);
+  clearTimeout(applyTheme._kt);
+  applyTheme._kt = setTimeout(() => kill.remove(), 300);  /* outlives every transition */
+}
+function applyFont(){
+  document.body.style.fontSize = fontSize + "px";
+  document.documentElement.style.setProperty("--fs", fontSize + "px");  /* scales every mono label + reply text via --fs-label/--fs */
+  $$("#fontSeg button").forEach(b => b.classList.toggle("on", parseFloat(b.dataset.f) === fontSize));
+  lsSet("sc_font", String(fontSize));
+}
+function applyResponsePrefs(){
+  document.body.classList.toggle("sans-responses", responseFont === "sans");
+  document.body.classList.toggle("reduce-motion", reduceMotion);
+  $$("#responseFontSeg button").forEach(b => b.classList.toggle("on", b.dataset.rf === responseFont));
+  $("#optMotion").checked = reduceMotion;
+  lsSet("sc_response_font", responseFont);
+  lsSet("sc_reduce_motion", reduceMotion ? "1" : "0");
+}
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (themeMode === "system") applyTheme(); }); } catch(e){}
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+function buzz(ms){ if (haptics && navigator.vibrate) try { navigator.vibrate(ms); } catch(e){} }
+
+/* ---------- drawer ---------- */
+const body = document.body;
+function openDrawer(){ body.classList.add("drawer-open"); body.classList.remove("drawer-closed"); }
+function closeDrawer(){ body.classList.remove("drawer-open"); }
+$("#menuBtn").onclick = () => {
+  if (matchMedia("(min-width:900px)").matches){ body.classList.toggle("drawer-closed"); }
+  else if (body.classList.contains("drawer-open")) closeDrawer(); else openDrawer();
+};
+$("#scrim").onclick = closeDrawer;
+$("#sideCollapse").onclick = () => $("#menuBtn").click();
+
+/* ---------- sheets ---------- */
+function openSheet(id){ closeDrawer(); closeAttachMenu(); $("#" + id).classList.add("open"); body.classList.add("sheet-open"); }
+function closeSheets(){ $$(".sheet").forEach(s => s.classList.remove("open")); body.classList.remove("sheet-open"); }
+function selectSettingsTab(tab){
+  $$("#setTabs .stab").forEach(x => x.classList.toggle("on", x.dataset.tab === tab));
+  $$(".spane").forEach(p => p.classList.toggle("on", p.dataset.pane === tab));
+}
+function openSettings(tab){ selectSettingsTab(tab || "general"); openSheet("settingsSheet"); }
+$("#sheetScrim").onclick = closeSheets;
+$$(".sheet-close").forEach(b => b.onclick = closeSheets);
+$("#gearBtn").onclick = () => openSettings("general");
+$("#settingsBtn").onclick = () => openSettings("general");
+$("#crewBtn").onclick = () => openSheet("crewSheet");
+$("#crewStrip").addEventListener("click", () => openSheet("crewSheet"));
+$("#toolsBtn").onclick = () => openSettings("tools");
+$("#dataBtn").onclick = () => openSettings("data");
+$("#modelBtn").onclick = () => openSettings("crew");
+$("#modelNote").onclick = () => openSettings("crew");
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape"){ closeSheets(); closeDrawer(); closeAttachMenu(); }
+  if ((e.ctrlKey || e.metaKey) && (e.key === "u" || e.key === "U")){
+    e.preventDefault();
+    if (!$("#attachBtn").disabled) $("#uploadBtn").click();
+  }
+});
+
+$("#setTabs").onclick = (e) => {
+  const b = e.target.closest(".stab"); if (!b) return;
+  $("#settingsSearch").value = "";
+  selectSettingsTab(b.dataset.tab);
+};
+
+$("#themeSeg").onclick = (e) => { const b = e.target.closest("button"); if (b){ themeMode = b.dataset.t; applyTheme(); } };
+$("#fontSeg").onclick = (e) => { const b = e.target.closest("button"); if (b){ fontSize = parseFloat(b.dataset.f); applyFont(); } };
+$("#optEnter").onchange = (e) => { sendEnter = e.target.checked; lsSet("sc_enter", sendEnter ? "1" : "0"); };
+$("#optHaptics").onchange = (e) => { haptics = e.target.checked; lsSet("sc_haptics", haptics ? "1" : "0"); };
+$("#responseFontSeg").onclick = (e) => { const b = e.target.closest("button"); if (b){ responseFont = b.dataset.rf; applyResponsePrefs(); } };
+$("#optMotion").onchange = (e) => { reduceMotion = e.target.checked; applyResponsePrefs(); };
+
+/* ---------- settings search ---------- */
+$("#settingsSearch").addEventListener("input", (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  if (!q){ selectSettingsTab(($("#setTabs .stab.on") || {}).dataset ? $("#setTabs .stab.on").dataset.tab : "general"); $("#settingsEmpty").style.display = "none"; return; }
+  let matches = 0;
+  $$(".spane").forEach(p => {
+    const hit = p.textContent.toLowerCase().includes(q);
+    p.classList.toggle("on", hit); if (hit) matches++;
+  });
+  $("#settingsEmpty").style.display = matches ? "none" : "block";
+});
+
+/* ---------- recents (localStorage, auto-saved) ---------- */
+let recents = [];
+try { recents = JSON.parse(lsGet("sc_recents", "[]")) || []; } catch(e){ recents = []; }
+let liveId = Number(lsGet("sc_live_id", "")) || null;
+function saveRecents(){ lsSet("sc_recents", JSON.stringify(recents.slice(0, 20))); }
+function freshLiveId(){ liveId = Date.now(); lsSet("sc_live_id", String(liveId)); return liveId; }
+function currentLiveId(){ return liveId || freshLiveId(); }
+function autoSaveRecent(list){
+  /* The live conversation is mirrored into Recents on every change, so
+     closing the app or starting a new chat never loses it. An empty list
+     means the crew was cleared/restarted — forget the live id so the next
+     conversation gets its own entry instead of mixing into an old one. */
+  if (!list.length){
+    if (liveId){ liveId = null; lsSet("sc_live_id", ""); }
+    return;
+  }
+  const id = currentLiveId();
+  const firstUser = list.find(m => m.role === "user");
+  recents = recents.filter(r => r.id !== id);
+  recents.unshift({id, ts: Date.now(), title: (firstUser ? firstUser.content : "Chat").slice(0, 60), messages: list});
+  recents = recents.slice(0, 20);
+  saveRecents();
+  renderRecents();
+}
+function relTime(ts){
+  const s = Math.max(1, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.round(s / 60) + "m ago";
+  if (s < 86400) return Math.round(s / 3600) + "h ago";
+  return Math.round(s / 86400) + "d ago";
+}
+function renderRecents(){
+  const box = $("#recents");
+  const q = ($("#searchInp").value || "").trim().toLowerCase();
+  const items = q ? recents.filter(r => (r.title + " " + (r.messages || []).map(m => m.content).join(" ")).toLowerCase().includes(q)) : recents;
+  if (!items.length){ box.innerHTML = `<div class="rc-empty">${q ? "No matching chats." : "Your saved chats will appear here."}</div>`; return; }
+  box.innerHTML = items.map(r =>
+    `<button class="rc-item${viewing && viewing.id === r.id && archiveMode ? " on" : ""}" data-id="${r.id}" title="${esc(r.title)}">` +
+    `${esc(r.title)}</button>`).join("");
+}
+$("#searchBtn").onclick = () => {
+  const w = $("#searchWrap"); w.hidden = !w.hidden;
+  if (!w.hidden){ $("#searchInp").focus(); } else { $("#searchInp").value = ""; renderRecents(); }
+};
+$("#searchInp").addEventListener("input", renderRecents);
+$("#recents").onclick = (e) => {
+  const b = e.target.closest(".rc-item"); if (!b) return;
+  const r = recents.find(x => String(x.id) === b.dataset.id);
+  if (r) openArchive(r);
+};
+
+/* ---------- chat state ---------- */
+let S = null, busy = false, sending = false, lastMsgKey = "", lastMessages = [], pendingUser = null;
+let lastActLen = -1, lastToolsJson = "", archiveMode = false, viewing = null;
+let selectedFiles = [], pendingAttachments = [];
+
+function setArchive(on){
+  archiveMode = on;
+  closeAttachMenu();
+  renderRecents();
+  renderAttachments();
+  renderChatIdentity();
+  if (S) updateComposer(S);
+}
+function renderChatIdentity(){
+  if (archiveMode && viewing){
+    $("#chatTitle").textContent = viewing.title || "Archived chat";
+    $("#mode").textContent = "saved chat · continues when you send";
+    $("#inp").disabled = false;
+    $("#inp").placeholder = "Continue this chat — sending restores it.";
+    $("#status").style.display = "none";
+    if (S) updateComposer(S);
+  } else {
+    $("#chatTitle").textContent = body.classList.contains("has-messages") ? $("#chatTitle").textContent : "New chat";
+    if (S){ $("#mode").textContent = S.phone_mode ? "real phone · 18 tools" : "PC simulation"; }
+    $("#status").style.display = "";
+    $("#inp").placeholder = body.classList.contains("has-messages") ? "Describe the next task." : "Describe the job, or attach a file.";
+    if (S) updateComposer(S);
+  }
+}
+function renderArchive(){
+  const chat = $("#chat");
+  body.classList.remove("fresh"); body.classList.add("has-messages");
+  $("#empty").style.display = "none";
+  chat.innerHTML = (viewing.messages || []).map((m, i) => messageHTML(m, i, viewing.messages, false)).join("");
+  const scroller = $("#scroll"); scroller.scrollTop = scroller.scrollHeight;
+}
+function openArchive(r){
+  viewing = r; setArchive(true); renderArchive(); closeDrawer();
+}
+
+/* ---------- rendering ---------- */
+function ticketHTML(m){
+  const job = m.job != null ? "JOB " + String(m.job).padStart(4, "0") : "JOB —";
+  const secs = m.elapsed_s != null ? `<span>${m.elapsed_s}s</span>` : "";
+  const workers = (m.workers || []).length
+    ? `<span class="tw">${m.workers.map(w => `<span title="${esc(w)}">${esc(icon(w))}</span>`).join("")}</span>` : "";
+  return `<div class="ticket"><span class="tjob">${job}</span><span class="tstate done">done</span>${secs}${workers}</div>`;
+}
+function usedHTML(m){
+  const usedEntries = Object.entries(m.tools_used || {});
+  if (!usedEntries.length) return "";
+  const calls = usedEntries.reduce((a, [, c]) => a + c, 0);
+  const secs = m.elapsed_s != null ? ` · ${m.elapsed_s}s` : "";
+  return `<button class="used-toggle" aria-label="Show which tools ran">Used ${usedEntries.length} tool${usedEntries.length === 1 ? "" : "s"} · ${calls} call${calls === 1 ? "" : "s"}${secs}</button>` +
+         `<div class="used-detail">${usedEntries.map(([t, c]) => esc(t) + (c > 1 ? " ×" + c : "")).join("<br>")}</div>`;
+}
+function friendlyError(content){
+  const c = String(content);
+  if (/no nvidia key|key configured|add it in settings/i.test(c))
+    return {main: "No crew key yet — add your free NVIDIA key in Settings, then send again.", detail: c};
+  if (/network|timeout|timed out|connection|unreachable|name or service|getaddrinfo|failed to establish/i.test(c))
+    return {main: "The crew couldn't reach the model service. Check your data connection and retry.", detail: c};
+  if (/rate|rpm|429|quota|too many requests/i.test(c))
+    return {main: "The model service is rate-limiting the crew. Wait a moment, then retry.", detail: c};
+  return {main: "The crew hit a snag running this job. Retry, or use the phone tools that work offline.", detail: c};
+}
+function errorHTML(m, i, list){
+  const f = friendlyError(m.content);
+  return `<div class="msg-row err"><div class="err-box"><div class="err-main">${esc(f.main)}</div>` +
+         `<div class="err-detail">${esc(f.detail)}</div>` +
+         `<div class="err-actions"><button class="btn-retry" data-err-retry="${i}">Retry</button>` +
+         `<button class="btn-offline" data-err-offline>Use offline tools</button></div></div></div>`;
+}
+function previousUserContent(list, index){
+  for (let j = Math.min(index, (list || []).length - 1); j >= 0; j--){
+    if (list[j] && list[j].role === "user") return list[j].content;
+  }
+  return null;
+}
+function messageHTML(m, i, list, allowUndo){
+  if (m.role === "user"){
+    const files = (m.attachments || []).map(f =>
+      `<div class="message-file" title="${esc(f.name)}${f.truncated ? " — content truncated for model context" : ""}">${FILE_ICON}<span>${esc(f.name)}` +
+      `<small>${fileSize(f.size)}${f.characters != null ? " · " + Number(f.characters).toLocaleString() + " characters read" : ""}${f.truncated ? " · truncated" : ""}</small></span></div>`).join("");
+    return `<div class="msg-row user"><div class="bubble">${files ? `<div class="message-files">${files}</div>` : ""}${esc(m.content)}</div></div>`;
+  }
+  if (String(m.content).startsWith("⚠️") || String(m.content).startsWith("Crew error:"))
+    return errorHTML(m, i, list);
+  const ticket = ticketHTML(m);
+  const used = usedHTML(m);
+  const undoBtn = allowUndo && i === list.length - 1
+    ? `<button class="copy-btn" data-action="undo" aria-label="Undo this exchange" title="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>` : "";
+  return `<div class="msg-row bot bot-row"><div class="ava">${SPARK}</div>` +
+         `<div class="bot-body">${ticket}<div class="bot-content">${md(m.content)}</div>${used}` +
+         `<div class="msg-actions">${undoBtn}` +
+         `<button class="copy-btn" data-action="copy" data-i="${i}" aria-label="Copy response" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5H5v11h3"/></svg></button>` +
+         `<button class="copy-btn" data-action="speak" data-i="${i}" aria-label="Read response aloud" title="Read aloud"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 10v4h3l4 4V6L8 10H5zm11-1c1.3 1.7 1.3 4.3 0 6m2-9c3 3.3 3 8.7 0 12"/></svg></button>` +
+         `<button class="copy-btn" data-action="retry" data-i="${i}" aria-label="Regenerate response" title="Regenerate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0111.8-1L20 12M4 12l2.1 5a7 7 0 0011.8-1"/></svg></button>` +
+         `</div></div></div>`;
+}
+function typingHTML(st){
+  if (!st.busy || archiveMode) return "";
+  const a = (st.activity || [])[st.activity.length - 1];
+  const jobNo = (lastMessages || []).filter(m => m.role === "user").length + (pendingUser ? 1 : 0);
+  const txt = a ? `${icon(a.worker)} ${a.worker} · ${a.action}` : "the crew is picking up the job";
+  return `<div class="typing"><div class="ticket" style="margin:0"><span class="tjob">JOB ${String(Math.max(1, jobNo)).padStart(4, "0")}</span>` +
+         `<span class="tstate run">running</span><span id="runClock">00:00</span></div>` +
+         `<span class="crew-status">${esc(txt)}</span></div>`;
+}
+function updateComposer(st){
+  const hasReadyFile = selectedFiles.some(f => f.status === "ready");
+  const hasContent = !!$("#inp").value.trim() || hasReadyFile;
+  $("#send").disabled = sending || !st.has_key || !hasContent;   /* busy is fine: it queues */
+  $("#inp").disabled = !st.has_key;
+  $("#attachBtn").disabled = sending || !st.has_key;
+}
+function usageHTML(usage){
+  const entries = Object.entries(usage || {});
+  if (!entries.length) return '<div class="mut">No model calls yet — the crew hasn\u2019t worked this session.</div>';
+  const max = Math.max(...entries.map(([, v]) => v.prompt_tokens + v.completion_tokens));
+  return entries.map(([m, v]) => {
+    const tot = v.prompt_tokens + v.completion_tokens;
+    return `<div class="card"><div class="mrow"><b>${esc(m)}</b><span>${v.calls} calls · ${tot} tok</span></div>` +
+           `<div class="bar"><i style="width:${Math.max(4, Math.round(tot / max * 100))}%"></i></div></div>`;
+  }).join("");
+}
+function activityHTML(list){
+  if (!(list || []).length) return '<div class="mut" style="padding:8px 2px">Nothing yet.</div>';
+  return list.slice().reverse().map(a =>
+    `<div class="ev ${a.level}"><span class="t">${esc(a.time)}</span><span>` +
+    `<span class="role-code">${icon(a.worker)}</span> <b>${esc(a.worker)}</b> · ${esc(a.action)}` +
+    `<div class="d">${esc((a.detail || "").slice(0, 180))}</div></span></div>`).join("");
+}
+const ROLES = [["foreman","FM"],["engineer","EN"],["laborer","LB"],["operator","OP"],["inspector","QA"],["storekeeper","SK"]];
+let lastCrewKey = "", lastApprovalKey = "", prevBusy = false, runTimer = null;
+function renderCrewStrip(st){
+  const key = [st.busy, (st.activity || []).length, (st.approvals || []).length, st.online].join("|");
+  if (key === lastCrewKey) return;
+  lastCrewKey = key;
+  const recent = st.busy ? (st.activity || []).slice(-8).map(e => e.worker) : [];
+  const pending = (st.approvals || []).length > 0;
+  $("#crewStrip").innerHTML = ROLES.map(([id, code]) => {
+    let cls = "crew-cell", title = id + " — idle";
+    if (recent.includes(id)){ cls += " working"; title = id + " — working"; }
+    else if (pending && id === "operator"){ cls += " blocked"; title = "operator — waiting for your approval"; }
+    return `<button class="${cls}" title="${title}" aria-label="${title}">${esc(code)}</button>`;
+  }).join("");
+}
+function startRunClock(){
+  if (runTimer) return;
+  runTimer = setInterval(() => {
+    const el = document.getElementById("runClock");
+    if (!el || !S || !S.busy || !S.busy_since){ if (runTimer){ clearInterval(runTimer); runTimer = null; } return; }
+    const t = Math.max(0, Math.round(Date.now() / 1000 - S.busy_since));
+    el.textContent = String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+  }, 1000);
+}
+function render(st){
+  S = st; busy = st.busy;
+  renderCrewStrip(st);
+  if (st.busy) startRunClock();
+  else { if (prevBusy) buzz(25); }
+  prevBusy = st.busy;
+  updateComposer(st);
+  $("#keySetup").style.display = st.has_key ? "none" : "block";
+  $("#keyState").textContent = st.has_key ? "● Key configured" : "No key yet — add it in Settings";
+  $("#keyState2").textContent = st.has_key
+    ? "A key is configured on this device. Pasting a new one replaces it."
+    : "No key yet — paste your free key from build.nvidia.com below.";
+  if (!archiveMode) $("#mode").textContent = st.phone_mode ? "real phone · 18 tools" : "PC simulation";
+
+  const s = $("#status");
+  s.classList.toggle("busy", st.busy);
+  s.classList.toggle("off", st.online === false);
+  $("#statusTxt").textContent = st.busy ? "crew working"
+    : st.online === false ? ("no internet" + (st.queued ? " · " + st.queued + " queued" : ""))
+    : "crew online";
+
+  /* messages */
+  if (!archiveMode){
+    const list = (st.messages || []).slice();
+    if (pendingUser && !list.some(m => m.role === "user" && m.content === pendingUser)){
+      list.push({role: "user", content: pendingUser, attachments: pendingAttachments});
+    } else if (pendingUser) { pendingUser = null; pendingAttachments = []; }
+
+    body.classList.toggle("fresh", !list.length);
+    body.classList.toggle("has-messages", !!list.length);
+    const firstUser = list.find(m => m.role === "user");
+    $("#chatTitle").textContent = firstUser ? firstUser.content.slice(0, 42) : "New chat";
+    $("#inp").placeholder = list.length ? "Describe the next task." : "Describe the job, or attach a file.";
+
+    const key = JSON.stringify(list.map(m => m.role + ":" + m.content.length + ":" + m.content.slice(-40) + ":" +
+      (m.attachments || []).map(f => f.name + ":" + f.size + ":" + f.characters).join(",")));
+    if (key !== lastMsgKey){
+      lastMsgKey = key; lastMessages = list;
+      autoSaveRecent(list);
+      const chat = $("#chat");
+      const emptyEl = $("#empty");
+      if (emptyEl) emptyEl.style.display = list.length ? "none" : "flex";
+      const scroller = $("#scroll");
+      const nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 140;
+      chat.innerHTML = list.map((m, i) => messageHTML(m, i, list, true)).join("") + typingHTML(st);
+      if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
+    } else {
+      const t = $("#chat").querySelector(".typing");
+      const keepClock = t ? ($("#runClock") || {}).textContent : null;
+      if (t) t.outerHTML = typingHTML(st);
+      else if (st.busy) $("#chat").insertAdjacentHTML("beforeend", typingHTML(st));
+      if (keepClock){ const el = $("#runClock"); if (el) el.textContent = keepClock; }
+    }
+    /* the empty state must never share the screen with a running job — even in the
+       poll gap before the pending user message renders */
+    if (st.busy){ const emptyEl = $("#empty"); if (emptyEl) emptyEl.style.display = "none"; }
+  }
+
+  /* approvals — stable DOM keeps an in-progress hold attached between polls */
+  const slot = $("#approvalSlot");
+  const approvalKey = archiveMode ? "" : JSON.stringify(st.approvals || []);
+  if (approvalKey !== lastApprovalKey){
+    lastApprovalKey = approvalKey;
+    slot.dispatchEvent(new Event("approval-reset"));
+    if ((st.approvals || []).length && !archiveMode){
+      slot.innerHTML = st.approvals.map((a, ai) =>
+        `<div class="approval">` +
+        `<div class="t">Work permit · ${esc(a.tool)}<span class="permit-no">P-${String(ai + 1).padStart(3, "0")}</span></div>` +
+        `<div class="d">${esc(a.summary)}</div>` +
+        `<div class="row">` +
+        `<button class="btn-allow" data-approve="${esc(a.id)}"><span class="fill"></span><span class="lbl">Hold to send<small>press and hold to approve</small></span></button>` +
+        `<button class="btn-deny" data-deny="${esc(a.id)}">Deny</button></div>` +
+        `<div class="hint">Nothing is sent until the hold completes. Deny cancels the action.</div></div>`).join("");
+      if (haptics) buzz(90);
+    } else slot.innerHTML = "";
+  }
+
+  /* activity + usage (sheet content, cheap to always update) */
+  if ((st.activity || []).length !== lastActLen){
+    lastActLen = (st.activity || []).length;
+    $("#activity").innerHTML = activityHTML(st.activity);
+  }
+  $("#usage").innerHTML = usageHTML(st.usage);
+  $("#usage2").innerHTML = usageHTML(st.usage);
+
+  /* tools (only re-render when changed, so toggles aren't yanked mid-tap) */
+  const tj = JSON.stringify(st.tools || []);
+  if (tj !== lastToolsJson){
+    lastToolsJson = tj;
+    const tools = st.tools || [];
+    $("#tools").innerHTML = tools.length
+      ? tools.map(t =>
+          `<div class="tool"><span>${esc(t.id)}${t.sensitive ? '<span class="s">approval</span>' : ""}</span>` +
+          `<label class="switch"><input type="checkbox" data-tool="${esc(t.id)}" ${t.enabled ? "checked" : ""}>` +
+          `<span class="slider"></span></label></div>`).join("")
+      : `<div class="mut" style="padding:8px 2px">Tools appear once the crew connects.</div>`;
+  }
+
+  /* crew models */
+  const mo = st.models || {};
+  $("#models").innerHTML = Object.keys(mo).length
+    ? Object.entries(mo).map(([r, list]) =>
+        `<div style="margin-bottom:7px"><b style="color:var(--text)">${esc(r)}</b>: ${esc((list || []).join(", "))}</div>`
+      ).join("") + (st.phone_mode ? "" : "<div class='mut' style='margin-top:6px'>PC simulation — phone tools are faked safely.</div>")
+    : `<div>Crew is connecting — it builds when you send your first message (needs internet).</div>`;
+}
+
+/* ---------- polling: one request at a time, with recovery after a stalled poll ---------- */
+let pollTimer = null, pollInFlight = false;
+async function refresh(){
+  if (pollInFlight || document.hidden) return;
+  pollInFlight = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const r = await fetch("/api/state", {signal: controller.signal});
+    if (!r.ok) throw new Error("state HTTP " + r.status);
+    render(await r.json());
+  } catch(e){ console.warn("state poll failed:", e); }
+  finally {
+    clearTimeout(timeout);
+    pollInFlight = false;
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(refresh, 1800);
+  }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+refresh();
+
+/* TEMP width probe (?probe=1) — reports elements wider than the viewport in document.title */
+if (location.search.indexOf("probe") >= 0){
+  setTimeout(() => {
+    const vw = document.documentElement.clientWidth;
+    const wide = Array.from(document.querySelectorAll("#main, #main *"))
+      .filter(el => el.getBoundingClientRect().right > vw + 2 || el.scrollWidth > el.clientWidth + 2)
+      .slice(0, 14)
+      .map(el => (el.id || el.tagName.toLowerCase()) + "." + String(el.className).split(" ")[0] +
+                 " w=" + Math.round(el.getBoundingClientRect().width) + " r=" + Math.round(el.getBoundingClientRect().right));
+    document.title = "PROBE vw=" + vw + " :: " + (wide.join(" | ") || "none wide");
+  }, 2000);
+}
+applyTheme(); applyFont(); applyResponsePrefs();
+$("#optEnter").checked = sendEnter;
+$("#optHaptics").checked = haptics;
+renderRecents();
+renderChatIdentity();
+/* phones start with the drawer closed (it was covering the app at launch) */
+if (matchMedia("(min-width:900px)").matches) openDrawer(); else closeDrawer();
+
+/* ---------- actions ---------- */
+async function api(path, body){
+  const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"},
+                               body: body ? JSON.stringify(body) : undefined});
+  let j;
+  try { j = await r.json(); }
+  catch(e){ return {error: "The crew returned an invalid response (HTTP " + r.status + ")."}; }
+  if (!r.ok) return {error: (j && j.error) || "Request failed (HTTP " + r.status + ")."};
+  return j && typeof j === "object" ? j : {error: "The crew returned an invalid response."};
+}
+async function restoreArchive(){
+  /* A saved chat becomes live again: the server replaces its conversation
+     with the archived messages so the crew keeps the full context. */
+  if (!viewing || !(viewing.messages || []).length){
+    viewing = null; setArchive(false); return true;
+  }
+  const viewingId = viewing.id;  /* keep the same recents entry when it goes live */
+  sending = true; updateComposer(S || {has_key: true});
+  const j = await api("/api/restore", {messages: viewing.messages});
+  sending = false;
+  if (!j || j.error){
+    toast((j && j.error) || "Could not continue that chat — try again.");
+    refresh();
+    return false;
+  }
+  viewing = null; setArchive(false);
+  if (viewingId != null){ liveId = viewingId; lsSet("sc_live_id", String(liveId)); }
+  lastMsgKey = ""; lastMessages = [];
+  refresh();
+  return true;
+}
+async function send(){
+  if (sending) return;
+  if (archiveMode && !await restoreArchive()) return;
+  const inp = $("#inp"), typed = inp.value.trim();
+  if (selectedFiles.some(f => f.status === "reading")){ toast("Wait for the files to finish loading."); return; }
+  const outgoing = selectedFiles.filter(f => f.status === "ready");
+  if (!typed && !outgoing.length) return;
+  const msg = typed || "Please read and summarize the attached file(s).";
+  const attachments = outgoing.map(f => ({name: f.name, size: f.size, type: f.type, data: f.data}));
+  sending = true; updateComposer(S || {has_key: true});
+  inp.value = ""; inp.style.height = "auto";
+  selectedFiles = []; renderAttachments(); closeAttachMenu();
+  pendingUser = msg; pendingAttachments = outgoing.map(f => ({name: f.name, size: f.size, type: f.type})); buzz(12);
+  body.classList.remove("fresh"); body.classList.add("has-messages");
+  $("#empty").style.display = "none";
+  $("#chatTitle").textContent = msg.slice(0, 42);
+  $("#chat").insertAdjacentHTML("beforeend", messageHTML(
+    {role: "user", content: msg, attachments: pendingAttachments}, lastMessages.length, lastMessages, false));
+  const scroller = $("#scroll");
+  scroller.scrollTop = scroller.scrollHeight;
+  let accepted = false;
+  try {
+    const j = await api("/api/chat", {message: msg, attachments});
+    if (!j || j.error || j.ok !== true){
+      const error = (j && j.error) || "The crew did not accept the message. Try again.";
+      toast(error);
+      $("#chat").insertAdjacentHTML("beforeend", errorHTML({content: error}, lastMessages.length, lastMessages));
+    } else {
+      accepted = true;
+      if (j.queued) toast(j.offline ? "No internet — queued. It sends when data works again."
+                                   : "Queued — the crew runs it after this job.");
+    }
+  } catch(e){ toast("Network error — your message and files were restored."); }
+  if (!accepted){
+    pendingUser = null; pendingAttachments = [];
+    lastMsgKey = "";  /* force the next render to remove the optimistic bubble/error */
+    inp.value = typed; inp.dispatchEvent(new Event("input"));
+    selectedFiles = outgoing; renderAttachments();
+  }
+  sending = false; updateComposer(S || {has_key: true});
+  refresh();
+}
+$("#send").onclick = send;
+$("#inp").addEventListener("input", () => {
+  const i = $("#inp"); i.style.height = "auto"; i.style.height = Math.min(i.scrollHeight, 150) + "px";
+  if (S) updateComposer(S);
+});
+$("#inp").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && sendEnter && !e.shiftKey){ e.preventDefault(); send(); }
+});
+
+(function(){
+  /* work permit: hold Allow ~0.65s to approve; keyboard Enter approves instantly */
+  const slot = $("#approvalSlot");
+  let holdTimer = null, fired = false;
+  function approve(btn){
+    fired = true;
+    api("/api/approval", {id: btn.dataset.approve, approved: true}).then(() => { buzz([20,40,20]); refresh(); });
+  }
+  slot.addEventListener("pointerdown", (e) => {
+    const btn = e.target.closest(".btn-allow");
+    if (!btn) return;
+    fired = false;
+    btn.classList.add("holding");
+    buzz(8);
+    holdTimer = setTimeout(() => { btn.classList.remove("holding"); approve(btn); }, 650);
+  });
+  slot.addEventListener("pointerup", (e) => {
+    const btn = e.target.closest(".btn-allow");
+    if (!btn) return;
+    clearTimeout(holdTimer);
+    btn.classList.remove("holding");
+    if (!fired) toast("Hold to send — keep pressing Allow.");
+  });
+  /* pointerleave doesn't bubble, so the old delegated listener never fired when the
+     pointer slid off the button — and nothing handled pointercancel, so a touch that
+     Android kills (scroll takeover, long-press menu) could still let the 650ms timer
+     approve. Capture phase catches every leave/cancel on the button. */
+  const cancelHold = (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest(".btn-allow") : null;
+    if (!btn) return;
+    if (e.type === "pointerleave" && e.relatedTarget && btn.contains(e.relatedTarget)) return;
+    clearTimeout(holdTimer); holdTimer = null; btn.classList.remove("holding");
+  };
+  slot.addEventListener("approval-reset", () => {
+    clearTimeout(holdTimer); holdTimer = null;
+    slot.querySelectorAll(".btn-allow.holding").forEach(btn => btn.classList.remove("holding"));
+  });
+  slot.addEventListener("pointerleave", cancelHold, true);
+  slot.addEventListener("pointercancel", cancelHold, true);
+  slot.addEventListener("contextmenu", (e) => {
+    if (e.target.closest(".btn-allow")) e.preventDefault();  /* long-press must not open the text menu mid-hold */
+  });
+  slot.addEventListener("click", async (e) => {
+    const allow = e.target.closest("[data-approve]"), deny = e.target.closest("[data-deny]");
+    if (allow && e.detail === 0){ approve(allow); return; }  /* keyboard activation */
+    if (deny){ await api("/api/approval", {id: deny.dataset.deny, approved: false}); buzz(20); refresh(); }
+  });
+})();
+
+$("#tools").addEventListener("change", async (e) => {
+  const box = e.target.closest("input[data-tool]"); if (!box) return;
+  await api("/api/tools", {id: box.dataset.tool, enabled: box.checked});
+  toast(box.dataset.tool + (box.checked ? " enabled" : " disabled"));
+});
+
+/* response actions + tap-to-reveal on touch */
+$("#chat").addEventListener("click", async (e) => {
+  const ut = e.target.closest(".used-toggle");
+  if (ut){
+    const d = ut.nextElementSibling;
+    if (d) d.classList.toggle("open");
+    ut.classList.toggle("open");
+    return;
+  }
+  const errRetry = e.target.closest("[data-err-retry]");
+  if (errRetry){
+    if (busy){ toast("The crew is still working."); return; }
+    if (archiveMode){ toast("Continue this chat first, then retry."); return; }
+    const prev = previousUserContent(lastMessages, Number(errRetry.dataset.errRetry));
+    if (prev){ $("#inp").value = prev; send(); }
+    else toast("Nothing to retry — type your request again.");
+    return;
+  }
+  if (e.target.closest("[data-err-offline]")){
+    closeDrawer();
+    openSettings("tools");
+    return;
+  }
+  const btn = e.target.closest("[data-action]");
+  if (!btn) return;
+  const list = archiveMode ? (viewing && viewing.messages) : lastMessages;
+  const index = Number(btn.dataset.i), m = (list || [])[index];
+  if (m == null) return;
+  if (btn.dataset.action === "undo"){
+    if (busy || sending || archiveMode){ toast("Undo needs an idle crew."); return; }
+    const j = await api("/api/undo", {});
+    if (j && j.ok){ lastMsgKey = ""; toast("Last exchange removed"); refresh(); }
+    else toast((j && j.error) || "Undo failed");
+  } else if (btn.dataset.action === "copy"){
+    try { await navigator.clipboard.writeText(m.content); toast("Copied"); }
+    catch(err){ toast("Copy failed"); }
+  } else if (btn.dataset.action === "speak"){
+    if (!window.speechSynthesis){ toast("Read aloud is not available here."); return; }
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(m.content); speechSynthesis.speak(utterance);
+    toast("Reading response");
+  } else if (btn.dataset.action === "retry"){
+    if (busy){ toast("The crew is still working."); return; }
+    let previous = null;
+    for (let j = index - 1; j >= 0; j--){ if (list[j].role === "user"){ previous = list[j].content; break; } }
+    if (previous){ $("#inp").value = previous; send(); }
+  }
+});
+if (isPhone){
+  $("#chat").addEventListener("touchstart", (e) => {
+    const row = e.target.closest(".msg-row.bot");
+    if (row) row.classList.add("tap");
+  }, {passive: true});
+}
+
+/* suggestion chips */
+$("#empty").addEventListener("click", (e) => {
+  const c = e.target.closest(".chip"); if (!c) return;
+  $("#inp").value = c.dataset.q; send();
+});
+
+/* ---------- file attachments ---------- */
+const MAX_UPLOAD_FILES = 5, MAX_UPLOAD_FILE_BYTES = 8 * 1024 * 1024, MAX_UPLOAD_TOTAL_BYTES = 20 * 1024 * 1024;
+function fileSize(bytes){
+  const n = Number(bytes) || 0;
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
+function renderAttachments(){
+  const box = $("#attachmentList");
+  box.classList.toggle("has-files", !!selectedFiles.length && !archiveMode);
+  box.innerHTML = selectedFiles.map(f =>
+    `<div class="attachment-pill ${f.status === "error" ? "error" : ""}" data-file-pill="${f.id}">${FILE_ICON}` +
+    `<span class="attachment-info"><span class="attachment-name" title="${esc(f.name)}">${esc(f.name)}</span>` +
+    `<span class="attachment-meta">${f.status === "reading" ? "Reading file…" : f.status === "error" ? esc(f.error) : fileSize(f.size) + " · ready"}</span></span>` +
+    `<button class="attachment-remove" data-remove-file="${f.id}" aria-label="Remove ${esc(f.name)}" title="Remove">×</button></div>`).join("");
+  if (S) updateComposer(S);
+}
+function readFileBase64(file){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+    reader.onerror = () => reject(new Error("Could not read this file."));
+    reader.readAsDataURL(file);
+  });
+}
+async function addFiles(fileList){
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  if (selectedFiles.length + files.length > MAX_UPLOAD_FILES){ toast("You can attach up to 5 files at once."); return; }
+  let total = selectedFiles.reduce((sum, f) => sum + f.size, 0) + files.reduce((sum, f) => sum + f.size, 0);
+  if (total > MAX_UPLOAD_TOTAL_BYTES){ toast("Attached files must total 20 MB or less."); return; }
+  for (const file of files){
+    if (!file.size){ toast(file.name + ": empty files cannot be read."); continue; }
+    if (file.size > MAX_UPLOAD_FILE_BYTES){ toast(file.name + ": files must be 8 MB or smaller."); continue; }
+    if (selectedFiles.some(f => f.name === file.name && f.size === file.size && f.modified === file.lastModified)){
+      toast(file.name + " is already attached."); continue;
+    }
+    const entry = {id: Date.now() + "-" + Math.random().toString(36).slice(2), name: file.name,
+                   size: file.size, type: file.type || "application/octet-stream", modified: file.lastModified,
+                   status: "reading", data: ""};
+    selectedFiles.push(entry); renderAttachments();
+    try { entry.data = await readFileBase64(file); entry.status = "ready"; }
+    catch(e){ entry.status = "error"; entry.error = e.message || "Could not read this file."; }
+    renderAttachments();
+  }
+}
+$("#uploadBtn").onclick = () => {
+  closeAttachMenu();
+  $("#fileInput").value = "";
+  $("#fileInput").click();
+};
+$("#fileInput").addEventListener("change", async (e) => { await addFiles(e.target.files); e.target.value = ""; });
+$("#attachmentList").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-remove-file]"); if (!b) return;
+  selectedFiles = selectedFiles.filter(f => f.id !== b.dataset.removeFile);
+  renderAttachments(); $("#inp").focus();
+});
+
+/* ---------- composer tools and voice ---------- */
+function closeAttachMenu(){ $("#attachMenu").classList.remove("open"); $("#attachBtn").setAttribute("aria-expanded", "false"); }
+$("#attachBtn").onclick = (e) => {
+  e.stopPropagation();
+  const open = $("#attachMenu").classList.toggle("open");
+  $("#attachBtn").setAttribute("aria-expanded", open ? "true" : "false");
+};
+$("#attachMenu").onclick = (e) => {
+  const b = e.target.closest("[data-open]"); if (!b) return;
+  if (b.dataset.open === "crew") openSheet("crewSheet"); else openSettings(b.dataset.open);
+};
+document.addEventListener("click", (e) => { if (!e.target.closest("#attachMenu") && !e.target.closest("#attachBtn")) closeAttachMenu(); });
+$("#chatModeBtn").onclick = () => { closeSheets(); $("#inp").focus(); };
+$("#crewModeBtn").onclick = () => openSheet("crewSheet");
+$("#shareBtn").onclick = () => $("#exportBtn").click();
+
+let recognition = null, listening = false;
+function startVoice(continuous){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition){ toast("Voice input is not available in this WebView."); return; }
+  if (listening){ recognition.stop(); return; }
+  recognition = new SpeechRecognition();
+  recognition.lang = navigator.language || "en-US";
+  recognition.interimResults = true; recognition.continuous = !!continuous;
+  recognition.onstart = () => { listening = true; $("#micBtn").style.color = "var(--accent)"; toast("Listening…"); };
+  recognition.onresult = (e) => {
+    let text = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) text += e.results[i][0].transcript;
+    if (text.trim()){ $("#inp").value = text; $("#inp").dispatchEvent(new Event("input")); }
+  };
+  recognition.onerror = () => toast("Voice input stopped. Check microphone permission.");
+  recognition.onend = () => { listening = false; $("#micBtn").style.color = ""; };
+  try { recognition.start(); } catch(e){ toast("Could not start voice input."); }
+}
+$("#micBtn").onclick = () => startVoice(false);
+$("#voiceBtn").onclick = () => startVoice(true);
+
+/* ---------- new chat / archive ---------- */
+async function newChat(){
+  if (busy || sending){ toast("Wait for the crew to finish this job."); return; }
+  const cur = archiveMode ? [] : lastMessages.slice();
+  if (cur.length){ autoSaveRecent(cur); }  /* idempotent upsert — auto-save usually beat us here */
+  viewing = null; setArchive(false);
+  lastMsgKey = ""; pendingUser = null; pendingAttachments = []; lastMessages = [];
+  selectedFiles = []; renderAttachments();
+  liveId = null; lsSet("sc_live_id", "");  /* next message starts a fresh recents entry */
+  try { await api("/api/clear"); } catch(e){}
+  $("#chat").innerHTML = ""; $("#empty").style.display = "flex";
+  body.classList.add("fresh"); body.classList.remove("has-messages");
+  $("#chatTitle").textContent = "New chat";
+  $("#inp").placeholder = "Describe the job, or attach a file.";
+  closeDrawer(); refresh();
+}
+$("#newChatBtn").onclick = newChat;
+
+/* ---------- data tab ---------- */
+$("#clear").onclick = async () => {
+  if (!confirm("Clear the current conversation?")) return;
+  if (!archiveMode){
+    await api("/api/clear");
+    lastMsgKey = ""; pendingUser = null; pendingAttachments = []; lastMessages = [];
+    selectedFiles = []; renderAttachments();
+    liveId = null; lsSet("sc_live_id", "");
+  }
+  closeSheets(); refresh(); toast("Conversation cleared");
+};
+$("#exportBtn").onclick = () => {
+  const msgs = archiveMode ? (viewing && viewing.messages || []) : lastMessages;
+  if (!msgs.length){ toast("Nothing to export yet."); return; }
+  const data = {app: "SiteCrew AI", exported: new Date().toISOString(), title: archiveMode ? viewing.title : "current chat", messages: msgs};
+  try {
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "sitecrew-chat.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast("Exported");
+  } catch(e){ toast("Export failed in this WebView."); }
+};
+
+/* ---------- key setup (both places) ---------- */
+async function saveKey(inputSel, btnSel, msgSel){
+  const btn = $(btnSel), msg = $(msgSel), key = $(inputSel).value.trim();
+  msg.textContent = "Verifying with NVIDIA…"; btn.disabled = true;
+  try {
+    const j = await api("/api/key", {key});
+    if (j.ok){
+      msg.textContent = "Key verified — crew is on site.";
+      $(inputSel).value = ""; lastMsgKey = ""; refresh();
+    } else msg.textContent = j.error || "Could not save that key.";
+  } catch(e){ msg.textContent = "Network error — try again."; }
+  btn.disabled = false;
+}
+$("#keySave").onclick = () => saveKey("#keyInp", "#keySave", "#keyMsg");
+$("#keySave2").onclick = () => saveKey("#keyInp2", "#keySave2", "#keyMsg2");
+
+/* scroll-to-bottom */
+const scroller = $("#scroll"), scrollBtn = $("#scrollBtn");
+scroller.addEventListener("scroll", () => {
+  const near = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 120;
+  scrollBtn.classList.toggle("hidden", near);
+});
+scrollBtn.onclick = () => { scroller.scrollTop = scroller.scrollHeight; };
+</script>
+</body>
+</html>

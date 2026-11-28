@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>SC harness</title></head>
+<body style="margin:0;background:#000">
+<iframe id="f" src="/" style="width:390px;height:2400px;border:0;display:block"></iframe>
+<script>
+(function(){
+  const q = new URLSearchParams(location.search);
+  const h = parseInt(q.get("h") || "2400", 10);
+  const w = parseInt(q.get("w") || "390", 10);
+  const f = document.getElementById("f");
+  f.style.width = w + "px";
+  f.style.height = h + "px";
+  f.addEventListener("load", () => {
+    setTimeout(() => {
+      try {
+        const d = f.contentDocument, w = f.contentWindow;
+        if (q.get("scroll") === "bottom") {
+          const s = d.getElementById("scroll");
+          if (s) s.scrollTop = s.scrollHeight;
+        }
+        if (q.get("probe") === "1") {
+          setTimeout(() => {
+            const vw = d.documentElement.clientWidth;
+            const wide = Array.from(d.querySelectorAll("#main, #main *"))
+              .filter(el => el.getBoundingClientRect().right > vw + 2 || el.scrollWidth > el.clientWidth + 2)
+              .slice(0, 14)
+              .map(el => (el.id || el.tagName.toLowerCase()) + "." + String(el.className).split(" ")[0] +
+                         " w=" + Math.round(el.getBoundingClientRect().width) + " r=" + Math.round(el.getBoundingClientRect().right));
+            const bc = d.querySelector(".bot-content");
+            const eb = d.querySelector(".err-box");
+            const ap = d.querySelector(".approval");
+            const r = (el) => el ? Math.round(el.getBoundingClientRect().left) : -1;
+            const cs = d.getElementById("chat") ? w.getComputedStyle(d.getElementById("chat")) : null;
+            const emptyEl = d.getElementById("empty");
+            const emptyVisible = emptyEl && w.getComputedStyle(emptyEl).display !== "none";
+            const greet = d.getElementById("greet");
+            const chips = Array.from(d.querySelectorAll(".chip"));
+            const lastChip = chips[chips.length - 1];
+            const scroller = d.getElementById("scroll");
+            const chipCut = (emptyVisible && lastChip && scroller)
+              ? Math.round(scroller.getBoundingClientRect().bottom - lastChip.getBoundingClientRect().bottom) : "n/a";
+            document.title = "PROBE vw=" + vw + " chatPL=" + (cs ? cs.paddingLeft : "?") +
+              " botL=" + r(bc) + " errL=" + r(eb) + " apprL=" + r(ap) +
+              " emptyL=" + r(greet) + " emptyPad=" + (emptyEl ? w.getComputedStyle(emptyEl).paddingLeft : "?") +
+              " chipClear=" + chipCut +
+              " :: " + (wide.join(" | ") || "none wide");
+          }, 1500);
+        }
+      } catch(e) { document.title = "HARNESS ERR " + e; }
+    }, 1200);
+  });
+})();
+</script>
+</body></html>

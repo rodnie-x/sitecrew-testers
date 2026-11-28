@@ -1,0 +1,32 @@
+{
+  "created_utc": "2026-11-28T09:31:32.018139+00:00",
+  "device": {
+    "status": "NOT RUN",
+    "reason": "phone unplugged"
+  },
+  "scope": "PC pre-route legacy GET baseline only; mirror/flip not complete",
+  "result": "PASS",
+  "goldens": {
+    "run": 15,
+    "passed": 15,
+    "api_state": 8,
+    "static": 7
+  },
+  "golden_tests": {
+    "run": 3,
+    "passed": 3
+  },
+  "g0": {
+    "run": 39,
+    "passed": 38,
+    "skipped": 1,
+    "skip_reason": "pypdf unavailable"
+  },
+  "normalization": "exact raw bodies; only Date/ETag/Last-Modified volatile headers; event time and busy_since frozen",
+  "stdout": "PASS: 15 legacy GET goldens (8 /api/state, 7 static), exact raw bodies\n",
+  "sha256": {
+    "scripts/capture_legacy_get.py": "51e060cfad5fcc7b37973dd5851a53099d8e27623d3ea23021ed43b6434967c8",
+    "tests/test_legacy_get_golden.py": "8edd548e760abc280023ce694c8ed981aafd7be01b19aa59b052b978e2aca432",
+    "tests/fixtures/legacy_get/manifest.json": "252a2ca34ac98f6b5a9657b3c0598ea0ece9f7dcaf8878a404180503d3eab856"
+  }
+}

@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>SC bigtext harness</title></head>
+<body style="margin:0;background:#000">
+<script>
+/* boots the app at the largest text size in a forced theme, then probes overflow.
+   ?theme=dark|light  &w=&h=  &probe=1 */
+(function(){
+  const q = new URLSearchParams(location.search);
+  const w = parseInt(q.get("w") || "390", 10);
+  const h = parseInt(q.get("h") || "844", 10);
+  const theme = q.get("theme") || "dark";
+  const f = document.createElement("iframe");
+  f.style.width = w + "px"; f.style.height = h + "px"; f.style.border = "0"; f.style.display = "block";
+  document.body.appendChild(f);
+  try {
+    f.contentWindow.localStorage.setItem("sc_font", "16");
+    f.contentWindow.localStorage.setItem("sc_theme", theme);
+  } catch(e) {}
+  f.src = "/";
+  f.addEventListener("load", () => {
+    setTimeout(() => {
+      try {
+        const d = f.contentDocument, win = f.contentWindow;
+        const s = d.getElementById("scroll");
+        if (s) s.scrollTop = s.scrollHeight;
+        if (q.get("probe") === "1") {
+          setTimeout(() => {
+            const vw = d.documentElement.clientWidth;
+            const wide = Array.from(d.querySelectorAll("#main, #main *"))
+              .filter(el => el.getBoundingClientRect().right > vw + 2 || el.scrollWidth > el.clientWidth + 2)
+              .slice(0, 14)
+              .map(el => (el.id || el.tagName.toLowerCase()) + "." + String(el.className).split(" ")[0] +
+                         " w=" + Math.round(el.getBoundingClientRect().width) + " r=" + Math.round(el.getBoundingClientRect().right));
+            const bc = d.querySelector(".bot-content");
+            const fs = bc ? win.getComputedStyle(bc).fontSize : "?";
+            const lbl = d.querySelector(".ticket .tw span, .used-row");
+            const lblFs = lbl ? win.getComputedStyle(lbl).fontSize : "?";
+            const inp = d.getElementById("inp");
+            const inpFs = inp ? win.getComputedStyle(inp).fontSize : "?";
+            const r = (el) => el ? Math.round(el.getBoundingClientRect().left) : -1;
+            const y = (el) => el ? Math.round(el.getBoundingClientRect().top) : -1;
+            const job = d.querySelector(".ticket .tjob");
+            const agents = d.querySelector(".ticket .tw");
+            const tabs = d.querySelector(".composer-tabs");
+            const tabsAbove = tabs && inp ? Math.round(inp.getBoundingClientRect().top - tabs.getBoundingClientRect().bottom) : -999;
+            document.title = "BIG vw=" + vw + " theme=" + d.documentElement.getAttribute("data-theme") +
+              " botFs=" + fs + " lblFs=" + lblFs + " inpFs=" + inpFs +
+              " botL=" + r(bc) + " ticketSplit=" + (y(agents) - y(job)) + " tabsAbove=" + tabsAbove +
+              " :: " + (wide.join(" | ") || "none wide");
+          }, 1500);
+        }
+      } catch(e) { document.title = "HARNESS ERR " + e; }
+    }, 1200);
+  });
+})();
+</script>
+</body></html>

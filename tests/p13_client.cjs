@@ -21,6 +21,7 @@ const stream = streamArg || "c_debug";
 const waitOverride = parseInt(process.argv[8] || "0", 10) || 0;   // boss: reconnect at wait=25
 const seed = parseInt(seedArg, 10) >>> 0;
 const livenessSeen = new Set();     // X-Liveness-Path values from poll responses
+const wakeReasons = {};             // X-Wake-Reason values from poll responses
 let s = seed || 1;
 function rng() {            // deterministic mulberry32
   s |= 0; s = (s + 0x6D2B79F5) | 0;
@@ -43,6 +44,8 @@ globalThis.fetch = async (url, opts) => {
   if (u.includes("/api/v2/poll")) {
     const lp = r.headers && r.headers.get ? r.headers.get("X-Liveness-Path") : null;
     if (lp) livenessSeen.add(lp);
+    const wr = r.headers && r.headers.get ? r.headers.get("X-Wake-Reason") : null;
+    if (wr) wakeReasons[wr] = (wakeReasons[wr] || 0) + 1;
     if (COUNT_FETCH) {
       if (r.status === 503) fetchCount.p503++;
       else if (r.status >= 400) fetchCount.pOther4xx5xx++;
@@ -112,6 +115,8 @@ async function latency() {
       "poll client's onEvents fired for that seq. Includes append RTT + " +
       "parking wakeup + poll response RTT (slightly conservative).",
     liveness_path: Array.from(livenessSeen),
+    wake_reasons: wakeReasons,
+    latencies_ms: latencies,
   };
   console.log(JSON.stringify(out));
   process.exit(out.p95_ms != null && out.p95_ms <= 300 ? 0 : 1);

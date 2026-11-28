@@ -9,16 +9,24 @@ import json
 import math
 import re
 import sqlite3
-from collections import Counter
+import unicodedata
 
 from . import db
 
-_TOKEN = re.compile(r"\w+", re.UNICODE)
+_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 _DAY_MS = 86400000
 
 
 def _tokens(value):
-    return [token.lower() for token in _TOKEN.findall(value or "")]
+    """The one tokenization contract shared by both indexes and their queries."""
+    normalized = unicodedata.normalize("NFKD", value or "").casefold()
+    without_diacritics = "".join(
+        char for char in normalized if not unicodedata.combining(char))
+    return _TOKEN.findall(without_diacritics)
+
+
+def _token_text(value):
+    return " ".join(_tokens(value))
 
 
 def _tags(entry):
@@ -38,21 +46,82 @@ def _entry(conn, entry):
     return entry
 
 
+def _entry_text(entry):
+    return (_token_text(entry["title"]), _token_text(entry["body"]),
+            _token_text(" ".join(str(tag) for tag in _tags(entry))))
+
+
+def _index_entry(conn, backend, entry):
+    entry_id = entry["id"]
+    text = _entry_text(entry)
+    if backend == "fts5":
+        row = conn.execute(
+            "SELECT rowid FROM brain_entries WHERE id=?", (entry_id,)).fetchone()
+        if row is None:
+            raise ValueError("unknown brain entry: %s" % entry_id)
+        rowid = row[0]
+        conn.execute("DELETE FROM brain_fts WHERE rowid=?", (rowid,))
+        conn.execute(
+            "INSERT INTO brain_fts(rowid, title, body, tags) VALUES(?,?,?,?)",
+            (rowid,) + text)
+    else:
+        conn.execute("DELETE FROM brain_terms WHERE entry_id=?", (entry_id,))
+        terms = _tokens(" ".join(text))
+        conn.executemany(
+            "INSERT INTO brain_terms(term, entry_id) VALUES(?,?)",
+            [(term, entry_id) for term in terms])
+
+
+def _rebuild(conn, backend):
+    """Replace the selected index from every entry, including empty documents."""
+    if backend == "fts5":
+        conn.execute("DELETE FROM brain_fts")
+    else:
+        conn.execute("DELETE FROM brain_terms")
+    rows = conn.execute("SELECT * FROM brain_entries")
+    for row in rows:
+        _index_entry(conn, backend, dict(row))
+
+
+def _probe_fts5(conn):
+    """Exercise a temporary FTS5 table; compile options are not a usable probe."""
+    try:
+        conn.execute(
+            "CREATE VIRTUAL TABLE temp.brain_fts_probe USING"
+            " fts5(value, tokenize='unicode61 remove_diacritics 0')")
+        conn.execute("INSERT INTO temp.brain_fts_probe(value) VALUES('probe')")
+        found = conn.execute(
+            "SELECT rowid FROM temp.brain_fts_probe"
+            " WHERE brain_fts_probe MATCH 'probe'").fetchone()
+        if found is None:
+            raise sqlite3.OperationalError("FTS5 probe MATCH returned no row")
+        return True
+    except sqlite3.OperationalError:
+        return False
+    finally:
+        conn.execute("DROP TABLE IF EXISTS temp.brain_fts_probe")
+
+
 def ensure_search_backend(conn, force_terms=False):
-    """Create the FTS index when possible and return 'fts5' or 'brain_terms'.
+    """Select, persist, and if necessary rebuild 'fts5' or 'brain_terms'.
 
     force_terms=True selects the phone-compatible path even on FTS5-capable PCs.
-    An actual CREATE is the feature probe; compile_options alone is insufficient.
+    A changed selection is rebuilt from all brain_entries so a database can move
+    in either direction between FTS5-capable and fallback-only runtimes.
     """
-    if not force_terms:
-        try:
-            conn.execute(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS brain_fts USING"
-                " fts5(entry_id UNINDEXED, title, body, tags)")
-            return "fts5"
-        except sqlite3.OperationalError:
-            pass
-    return "brain_terms"
+    backend = "brain_terms" if force_terms or not _probe_fts5(conn) else "fts5"
+    if backend == "fts5":
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS brain_fts USING"
+            " fts5(title, body, tags, tokenize='unicode61 remove_diacritics 0')")
+    previous = conn.execute(
+        "SELECT value FROM meta WHERE key='search_backend'").fetchone()
+    if previous is None or previous[0] != backend:
+        _rebuild(conn, backend)
+        conn.execute(
+            "INSERT OR REPLACE INTO meta(key, value) VALUES('search_backend', ?)",
+            (backend,))
+    return backend
 
 
 class SearchIndex:
@@ -64,21 +133,7 @@ class SearchIndex:
 
     def add(self, entry):
         """Index a brain_entries row (or its mapping); repeated adds replace terms."""
-        entry = _entry(self.conn, entry)
-        entry_id = entry["id"]
-        text = (entry["title"], entry["body"],
-                " ".join(str(tag) for tag in _tags(entry)))
-        if self.backend == "fts5":
-            self.conn.execute("DELETE FROM brain_fts WHERE entry_id=?", (entry_id,))
-            self.conn.execute(
-                "INSERT INTO brain_fts(entry_id, title, body, tags) VALUES(?,?,?,?)",
-                (entry_id,) + text)
-        else:
-            self.conn.execute("DELETE FROM brain_terms WHERE entry_id=?", (entry_id,))
-            terms = _tokens(" ".join(text))
-            self.conn.executemany(
-                "INSERT INTO brain_terms(term, entry_id) VALUES(?,?)",
-                [(term, entry_id) for term in terms])
+        _index_entry(self.conn, self.backend, _entry(self.conn, entry))
 
     def update(self, entry):
         """Refresh an existing row after its title, body, or tags change."""
@@ -87,13 +142,15 @@ class SearchIndex:
     def delete(self, entry_id):
         """Remove only index content; Brain retraction/hard-delete policy is Phase 5."""
         if self.backend == "fts5":
-            self.conn.execute("DELETE FROM brain_fts WHERE entry_id=?", (entry_id,))
+            self.conn.execute(
+                "DELETE FROM brain_fts WHERE rowid="
+                "(SELECT rowid FROM brain_entries WHERE id=?)", (entry_id,))
         else:
             self.conn.execute("DELETE FROM brain_terms WHERE entry_id=?", (entry_id,))
 
     def search(self, query, kinds=None, case_id=None, site=None, limit=8, now_ms=None):
         """Return at most eight matching compact cards, best ranked first."""
-        terms = _tokens(query)
+        terms = list(dict.fromkeys(_tokens(query)))
         if not terms:
             return []
         limit = max(0, min(int(limit), 8))
@@ -133,37 +190,47 @@ class SearchIndex:
     def _fts_candidates(self, terms):
         match = " AND ".join('"%s"' % term for term in terms)
         rows = self.conn.execute(
-            "SELECT e.*, -bm25(brain_fts, 0.0, 1.0, 1.0, 1.0) AS relevance"
-            " FROM brain_fts f JOIN brain_entries e ON e.id=f.entry_id"
+            "SELECT e.*, -bm25(brain_fts, 1.0, 1.0, 1.0) AS relevance"
+            " FROM brain_fts f JOIN brain_entries e ON e.rowid=f.rowid"
             " WHERE brain_fts MATCH ?", (match,)).fetchall()
         return [(dict(row), row["relevance"]) for row in rows]
 
     def _term_candidates(self, terms):
-        documents = {}
-        for row in self.conn.execute("SELECT term, entry_id FROM brain_terms"):
-            documents.setdefault(row["entry_id"], Counter())[row["term"]] += 1
-        candidate_ids = [entry_id for entry_id, counts in documents.items()
-                         if all(term in counts for term in terms)]
-        if not candidate_ids:
+        """Aggregate candidates in SQL; Python sees matches, never the whole index."""
+        total_docs = self.conn.execute(
+            "SELECT COUNT(*) FROM brain_entries").fetchone()[0]
+        if not total_docs:
             return []
-        total_docs = len(documents)
-        average_length = (sum(sum(counts.values()) for counts in documents.values())
-                          / float(total_docs))
-        frequencies = {term: sum(1 for counts in documents.values() if term in counts)
-                       for term in terms}
-        idfs = {term: math.log(1.0 + (total_docs - frequencies[term] + 0.5)
-                               / (frequencies[term] + 0.5)) for term in terms}
-        placeholders = ",".join("?" for entry_id in candidate_ids)
+        total_length = self.conn.execute(
+            "SELECT COUNT(*) FROM brain_terms").fetchone()[0]
+        average_length = total_length / float(total_docs)
+        placeholders = ",".join("?" for term in terms)
+        frequencies = dict(self.conn.execute(
+            "SELECT term, COUNT(DISTINCT entry_id) FROM brain_terms"
+            " WHERE term IN (%s) GROUP BY term" % placeholders,
+            terms).fetchall())
+        idfs = {
+            term: max(1e-6, math.log(
+                (total_docs - frequencies.get(term, 0) + 0.5)
+                / (frequencies.get(term, 0) + 0.5)))
+            for term in terms
+        }
+        term_counts = "," + ",".join(
+            " SUM(CASE WHEN t.term=? THEN 1 ELSE 0 END) AS tf_%d" % n
+            for n in range(len(terms)))
         rows = self.conn.execute(
-            "SELECT * FROM brain_entries WHERE id IN (%s)" % placeholders,
-            candidate_ids).fetchall()
+            "SELECT e.*, COUNT(t.term) AS doc_length" + term_counts +
+            " FROM brain_terms t JOIN brain_entries e ON e.id=t.entry_id"
+            " GROUP BY t.entry_id"
+            " HAVING COUNT(DISTINCT CASE WHEN t.term IN (" + placeholders +
+            ") THEN t.term END)=?",
+            terms + terms + [len(terms)]).fetchall()
         ranked = []
         for row in rows:
-            counts = documents[row["id"]]
-            length = sum(counts.values())
+            length = row["doc_length"]
             relevance = 0.0
-            for term in terms:
-                frequency = counts[term]
+            for n, term in enumerate(terms):
+                frequency = row["tf_%d" % n]
                 denominator = frequency + 1.2 * (
                     1.0 - 0.75 + 0.75 * length / average_length)
                 relevance += idfs[term] * frequency * 2.2 / denominator

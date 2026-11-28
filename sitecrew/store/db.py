@@ -10,6 +10,7 @@ Boss rulings implemented here (docs/BOSS_PHASE1_ORDER.md):
 - chat ids: new_id('c') only; reject 'office' and ids containing ':' or ',';
   legacy ids outside ^[A-Za-z0-9_-]{1,64}$ remap deterministically via meta.
 """
+import hashlib
 import json
 import os
 import re
@@ -61,17 +62,22 @@ def valid_chat_id(chat_id):
             and chat_id not in _FORBIDDEN_IDS and ":" not in chat_id and "," not in chat_id)
 
 
-def remap_legacy_chat_id(legacy_id, conn, mapper=None):
-    """Deterministically remap a legacy id outside the safe charset; store mapping."""
-    if valid_chat_id(legacy_id):
-        return legacy_id
-    row = conn.execute("SELECT value FROM meta WHERE key=?",
-                       ("chat_id_map:" + (legacy_id or ""),)).fetchone()
+def remap_legacy_chat_id(legacy_id, conn, mapper=None, persist=True):
+    """Deterministically remap unsafe legacy ids; optionally persist the shared mapping."""
+    raw = str(legacy_id or "")
+    if valid_chat_id(raw):
+        return raw
+    key = "chat_id_map:" + raw
+    row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
     if row:
         return row[0]
-    new = new_id("c") if mapper is None else mapper(legacy_id)
-    conn.execute("INSERT INTO meta(key, value) VALUES(?, ?)",
-                 ("chat_id_map:" + (legacy_id or ""), new))
+    if mapper is None:
+        digest = hashlib.sha256(("chatid|" + raw).encode("utf-8")).hexdigest()
+        new = "c_imp_" + digest[:16]
+    else:
+        new = mapper(legacy_id)
+    if persist:
+        conn.execute("INSERT INTO meta(key, value) VALUES(?, ?)", (key, new))
     return new
 
 # ---------------------------------------------------------------- migrations
@@ -338,6 +344,7 @@ EVENT_TYPES = set(OFFICE_TYPES) | set(BRAIN_TYPES) | set(SITE_TYPES)
 # Import events (boss ruling): system.import.chat + system.import.completed.
 EVENT_TYPES.add("system.import.chat")
 EVENT_TYPES.add("system.import.completed")
+EVENT_TYPES.update(("clear.applied", "compression.applied", "restore.applied"))
 
 
 def event_type_known(type_name):

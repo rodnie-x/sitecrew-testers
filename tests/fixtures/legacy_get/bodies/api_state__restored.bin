@@ -1,0 +1,1 @@
+{"activity":[],"android":false,"approvals":[],"busy":false,"busy_since":null,"has_key":false,"messages":[{"attachments":[{"characters":4,"name":"saved.txt","size":4,"truncated":false,"type":"text/plain"}],"content":"restored question","role":"user"},{"content":"restored answer","role":"assistant"}],"models":{},"online":false,"phone_mode":false,"queued":0,"tools":[],"usage":{}}

@@ -9,8 +9,8 @@ Normalized chat dict (what every reader must produce):
      "queued":   [{"text": str, "ts": ms|None}, ...]}                                          # unsent, in order
 
 Design (amends my earlier "one transaction per source"; the chat is the atomic unit):
-- one EventStore.append per chat: chat row + messages + queue rows + the done-marker + the
-  `system.import.chat` event commit in ONE transaction, so a kill leaves a chat entirely imported or
+- one EventStore.append_batch per chat: chat row + messages + queue rows + the done-marker +
+  message.created events and `system.import.chat` commit in ONE transaction, so a kill leaves a chat entirely imported or
   not at all; a rerun skips chats whose marker matches and redoes the rest (ids are deterministic and
   every insert is OR IGNORE, so redoing is harmless).
 - one final append to the `office` stream writes the source-level marker + `system.import.completed`.
@@ -22,12 +22,9 @@ Design (amends my earlier "one transaction per source"; the chat is the atomic u
 import hashlib
 import json
 import os
-import re
 import shutil
 
 from . import db as sdb
-
-_CHAT_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _sha(*parts):
@@ -64,18 +61,8 @@ def meta_set(conn, key, value):
 
 
 def chat_id_for(conn, raw, persist=True):
-    """Legacy id -> store id. ADAPT: use your db.py remap if it has one (it should record the mapping
-    in meta so the posted recents get the same id). Rules: ^[A-Za-z0-9_-]{1,64}$ and != 'office'."""
-    raw = str(raw)
-    if _CHAT_ID.match(raw) and raw != "office":
-        return raw
-    existing = meta_get(conn, "idmap:" + raw)
-    if existing:
-        return existing
-    new = "c_imp_" + _sha("chatid", raw)[:16]
-    if persist:
-        meta_set(conn, "idmap:" + raw, new)
-    return new
+    """Use the store's one deterministic mapping for queue, RAM and posted recents."""
+    return sdb.remap_legacy_chat_id(raw, conn, persist=persist)
 
 
 # ---- ADAPT: map YOUR legacy shapes into normalized chat dicts ---------------------------------------
@@ -116,41 +103,77 @@ def import_chat(store, source, ci, chat, now_ms=None):
         return "skipped"
     now = now_ms if now_ms is not None else sdb.utc_ms()
     msgs, queued = chat.get("messages", []), chat.get("queued", [])
+    items = [
+        {"type": "message.created", "id": imp_id("m", source, ci, mi),
+         "data": {"text": m["text"], "origin": "import", "source": source},
+         "ts": m.get("ts") or now}
+        for mi, m in enumerate(msgs)
+    ]
+    items.extend(
+        {"type": "message.created", "id": imp_id("qm", source, ci, qi),
+         "data": {"text": qm["text"], "origin": "import", "source": source},
+         "ts": qm.get("ts") or now}
+        for qi, qm in enumerate(queued))
+    items.append({"type": "system.import.chat", "data": {
+        "origin": "import", "source": source, "chat_index": ci,
+        "message_count": len(msgs), "queue_count": len(queued),
+        "chat_digest": dig}, "ts": now})
 
     def writer(c, seq):
         chat_id_for(c, chat["id"])             # mapping commits with chat state + event
-        c.execute(
-            "INSERT OR IGNORE INTO chats(id,title,pinned,model,mem_enabled,created_at,updated_at)"
-            " VALUES(?,?,?,?,1,?,?)",
-            (cid, chat.get("title"), int(bool(chat.get("pinned"))), chat.get("model"),
-             chat.get("created_at") or now, chat.get("updated_at") or now))
-        prev = None
+        existing = c.execute(
+            "SELECT title,pinned,model,created_at,updated_at,head_message_id"
+            " FROM chats WHERE id=?", (cid,)).fetchone()
+        incoming_created = chat.get("created_at") if chat.get("created_at") is not None else now
+        incoming_updated = chat.get("updated_at") if chat.get("updated_at") is not None else now
+        if existing is None:
+            c.execute(
+                "INSERT INTO chats(id,title,pinned,model,mem_enabled,created_at,updated_at)"
+                " VALUES(?,?,?,?,1,?,?)",
+                (cid, chat.get("title"), int(bool(chat.get("pinned"))), chat.get("model"),
+                 incoming_created, incoming_updated))
+            prev = None
+        else:
+            created = min(value for value in (existing["created_at"], incoming_created)
+                          if value is not None)
+            updated = max(value for value in (existing["updated_at"], incoming_updated)
+                          if value is not None)
+            c.execute(
+                "UPDATE chats SET title=?,pinned=?,model=?,created_at=?,updated_at=?"
+                " WHERE id=?",
+                (existing["title"] if existing["title"] is not None else chat.get("title"),
+                 max(int(existing["pinned"] or 0), int(bool(chat.get("pinned")))),
+                 existing["model"] if existing["model"] is not None else chat.get("model"),
+                 created, updated, cid))
+            prev = existing["head_message_id"]
         for mi, m in enumerate(msgs):
             mid = imp_id("m", source, ci, mi)
+            content = {"text": m["text"], "origin": "import", "source": source}
             c.execute(
                 "INSERT OR IGNORE INTO messages(id,chat_id,parent_id,role,kind,content_json,status,"
                 "client_msg_id,turn_id,created_at) VALUES(?,?,?,?,?,?,?,NULL,NULL,?)",
-                (mid, cid, prev, m["role"], m["role"], sdb.dumps({"text": m["text"]}), "final",
-                 m.get("ts") or now))            # content shape: keep identical to what the shims write
+                (mid, cid, prev, m["role"], m["role"], sdb.dumps(content), "final",
+                 m.get("ts") or now))
             prev = mid
-        if prev:
+        if msgs:
             c.execute("UPDATE chats SET head_message_id=? WHERE id=?", (prev, cid))
+        next_position = c.execute(
+            "SELECT COALESCE(MAX(position),-1)+1 FROM queue WHERE chat_id=?",
+            (cid,)).fetchone()[0]
         for qi, qm in enumerate(queued):
             mid = imp_id("qm", source, ci, qi)
+            content = {"text": qm["text"], "origin": "import", "source": source}
             c.execute(
                 "INSERT OR IGNORE INTO messages(id,chat_id,parent_id,role,kind,content_json,status,"
                 "client_msg_id,turn_id,created_at) VALUES(?,?,NULL,'user','user',?,'final',NULL,NULL,?)",
-                (mid, cid, sdb.dumps({"text": qm["text"]}), qm.get("ts") or now))
+                (mid, cid, sdb.dumps(content), qm.get("ts") or now))
             c.execute(
                 "INSERT OR IGNORE INTO queue(id,chat_id,message_id,state,position) VALUES(?,?,?,?,?)",
-                (imp_id("q", source, ci, qi), cid, mid, "pending", qi))
+                (imp_id("q", source, ci, qi), cid, mid, "pending", next_position + qi))
         meta_set(c, marker, dig)                 # marker commits WITH the data
         return None
 
-    store.append(cid, "system.import.chat",
-                 {"source": source, "chat_index": ci, "message_count": len(msgs),
-                  "queue_count": len(queued), "chat_digest": dig},
-                 state_writer=writer, strict=True)
+    store.append_batch(cid, items, state_writer=writer, strict=True)
     return "imported"
 
 
@@ -179,7 +202,7 @@ def verify_import(conn, source, chats):
     out = {"source": source, "chats_in": len(chats), "chats_out": 0, "messages_in": 0,
            "messages_out": 0, "queue_in": 0, "queue_out": 0, "mismatches": [], "digests": {}}
     for ci, chat in enumerate(chats):
-        cid = chat_id_for(conn, chat["id"])
+        cid = chat_id_for(conn, chat["id"], persist=False)
         if conn.execute("SELECT 1 FROM chats WHERE id=?", (cid,)).fetchone():
             out["chats_out"] += 1
         want = chat_texts(chat)
