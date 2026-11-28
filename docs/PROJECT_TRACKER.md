@@ -56,9 +56,10 @@ received before disconnect. In-app Claude remains logged out (owner action).
   sampler now keeps full 4-tuples, saves decay samples incrementally, samples
   p95 every 5 s, checks pid/errors/negative deltas, gates every parker, rereads
   head before parking, and restores USB stay-awake in `finally`.
-- Code-review boss: second verdict FIX FIRST received. Its crash, p95, parker,
-  CDP URL, event-buffer, run-id and cleanup findings are fixed locally; PC
-  smoke checks PASS. Re-review is the next Chrome-2 task.
+- Code-review boss: third review found stale load events, probe readiness,
+  runtime hash verification, sub-second p95 artifacts, attach retry and forward
+  error handling. Those are fixed locally; the committed `test_tooling_pc.py`
+  regression suite passes 5/5. Narrow verification review is next.
 - Phase-2 planning boss: execution order and risks received (including token
   contrast failures and the Stop-abort feasibility spike). Archive the full
   order when Chrome-3 reconnects, then review S0 before implementation.

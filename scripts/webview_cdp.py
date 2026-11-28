@@ -65,7 +65,7 @@ class CDP:
         self.target_url = None
         self._events = collections.deque(maxlen=256)
 
-    def attach_to_page(self, url_prefix=None):
+    def attach_to_page(self):
         with urllib.request.urlopen(
                 "http://127.0.0.1:%d/json" % self.port, timeout=10) as r:
             targets = json.loads(r.read().decode("utf-8"))
@@ -140,21 +140,21 @@ class CDP:
                 self._events.append(msg)
         raise TimeoutError("Page.loadEventFired not seen in %ss" % timeout)
 
-    def _settle(self, url_prefix=None, timeout=30):
-        """After navigate/reload: readyState complete + href matches + the
-        document is really the app's (review fix #4: no stale-DOM hashing)."""
+    def _settle(self, url_prefix=None, timeout=30, ready_js=None):
+        """Wait for the requested document, with a page-specific readiness
+        expression (the debug probe has #out, not the app's #transcript)."""
         if url_prefix is None:
             target = urllib.parse.urlparse(self.target_url or "")
             url_prefix = urllib.parse.urlunparse(
                 (target.scheme, target.netloc, "/", "", "", ""))
+        ready_js = ready_js or ("document.querySelector('textarea, "
+                                "div[contenteditable], #transcript, main')")
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
                 st = self.evaluate(
                     "JSON.stringify({ rs: document.readyState,"
-                    " href: location.href,"
-                    " hasApp: !!document.querySelector('textarea,"
-                    " div[contenteditable], #transcript, main') })",
+                    " href: location.href, hasApp: !!(" + ready_js + ") })",
                     timeout=5)
                 d = json.loads(st) if isinstance(st, str) else st
                 if (d.get("rs") == "complete"
@@ -167,27 +167,31 @@ class CDP:
         raise RuntimeError("page did not settle on %s within %ss"
                            % (url_prefix, timeout))
 
-    def navigate(self, url, settle=True):
+    def navigate(self, url, settle=True, ready_js=None):
+        self._events.clear()      # never consume a previous page's load event
         res = self.send("Page.navigate", {"url": url})
         if res.get("errorText"):                       # review fix #4
             raise RuntimeError("navigate failed: %s" % res["errorText"])
+        # Even a non-settling away navigation must consume ITS load event;
+        # otherwise about:blank can satisfy the next page's _wait_load().
+        self._wait_load()
         if settle:
-            self._wait_load()
             parsed = urllib.parse.urlparse(url)
             if parsed.scheme not in ("http", "https") or not parsed.netloc:
                 raise ValueError("settle=True requires an absolute HTTP(S) URL")
             prefix = urllib.parse.urlunparse(
                 (parsed.scheme, parsed.netloc, "/", "", "", ""))
-            self._settle(url_prefix=prefix)
+            self._settle(url_prefix=prefix, ready_js=ready_js)
         return res
 
-    def reload(self, settle=True):
+    def reload(self, settle=True, ready_js=None):
+        self._events.clear()      # never consume a previous page's load event
         res = self.send("Page.reload", {"ignoreCache": False})
         if res.get("errorText"):
             raise RuntimeError("reload failed: %s" % res["errorText"])
+        self._wait_load()
         if settle:
-            self._wait_load()
-            self._settle()
+            self._settle(ready_js=ready_js)
         return res
 
     def close(self):
@@ -212,7 +216,8 @@ def connect(timeout=30):
             cdp = CDP(port=CDP_PORT, timeout=timeout)
             cdp.attach_to_page()
             return cdp
-        except (websocket.WebSocketException, OSError) as e:
+        except (websocket.WebSocketException, OSError,
+                RuntimeError, ValueError) as e:
             last = e
             time.sleep(1)
     raise RuntimeError("CDP attach failed: %s" % last)

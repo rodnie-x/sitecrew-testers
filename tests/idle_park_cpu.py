@@ -21,6 +21,7 @@ Review fixes applied:
   states_match compares only wakefulness + charging (level recorded
       start/end); state captured at BOTH window ends.
 """
+import hashlib
 import json
 import os
 import re
@@ -150,7 +151,8 @@ def window(name, seconds, clients, head, interval=5.0):
         else:
             points.append(sample)
     ticks1 = proc_sample()
-    if ticks1 is not None:
+    if ticks1 is not None and (not points or
+                               ticks1[0] - points[-1][0] >= interval / 2):
         points.append(ticks1)
     state_end = device_state()
     stop.set()
@@ -205,6 +207,20 @@ def measure_on_device(serial):
     with urllib.request.urlopen(
             BASE + "/api/v2/debug/store-state?db=main", timeout=10) as r:
         st = json.loads(r.read().decode("utf-8"))
+    module_files = ("sitecrew/api_v2.py", "server/app.py",
+                    "server/static/poll.js")
+    device_hashes = st.get("store_modules_sha256") or {}
+    local_hashes = {f: hashlib.sha256(
+        open(os.path.join(REPO, *f.split("/")), "rb").read()).hexdigest()
+        for f in module_files}
+    mismatches = {f: {"local": local_hashes[f],
+                      "device": device_hashes.get(f)}
+                  for f in module_files
+                  if device_hashes.get(f) != local_hashes[f]}
+    if mismatches:
+        print(json.dumps({"error": "device/PC module hash mismatch",
+                          "mismatches": mismatches}, indent=2))
+        return 1
     head = st.get("head", 0)
     if head <= 0:
         print(json.dumps({"error": "store head is 0 — refusing to measure "
@@ -294,6 +310,9 @@ def measure_on_device(serial):
         "device": {"serial_sha256": __import__("hashlib").sha256(
             serial.encode()).hexdigest()},
         "park_slice_s": PARK_SLICE_S,
+        "local_module_sha256": local_hashes,
+        "device_module_sha256": {f: device_hashes.get(f)
+                                 for f in module_files},
         "parked_clients": 2,
         "head_at_start": head,
         "decay_from_restart": decay,
@@ -324,7 +343,11 @@ def main():
         print(json.dumps({"error": "no adb device — device run NOT RUN"}))
         return 1
     os.environ["ANDROID_SERIAL"] = serial
-    adb_helpers.forward(18110)
+    forward_out, forward_rc = adb_helpers.forward(18110)
+    if forward_rc != 0:
+        print(json.dumps({"error": "adb forward failed",
+                          "rc": forward_rc, "detail": forward_out[:200]}))
+        return 1
     adb_helpers.adb("shell", "svc", "power", "stayon", "usb", timeout=15)
     try:
         return measure_on_device(serial)

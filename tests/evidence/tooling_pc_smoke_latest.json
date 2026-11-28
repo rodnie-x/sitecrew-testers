@@ -1,18 +1,20 @@
 {
-  "created_utc": "2026-11-28T00:23:10.669985+00:00",
-  "scope": "PC-only mocked/tooling smoke; no physical-device claim",
-  "checks": {
-    "sampler_math_and_negative_delta": "PASS",
-    "probe_run_id_and_stale_result_clearing": "PASS",
-    "cdp_buffer_about_blank_localhost": "PASS"
-  },
+  "created_utc": "2026-11-28T01:23:31.357339+00:00",
+  "scope": "PC-only unittest mocks; no physical-device claim",
+  "command": "python -X utf8 -m unittest tests.test_tooling_pc -v",
+  "result": "PASS",
+  "tests_run": 5,
+  "test_source": "tests/test_tooling_pc.py",
+  "public_subset": "4 PASS + 1 explicit SKIP (private app modules absent)",
+  "stderr": "test_away_back_reload_consumes_each_own_load (tests.test_tooling_pc.CDPNavigation.test_away_back_reload_consumes_each_own_load)\nabout:blank -> app -> reload cannot consume a stale load event. ... ok\ntest_event_buffer (tests.test_tooling_pc.CDPNavigation.test_event_buffer) ... ok\ntest_probe_page_has_custom_readiness (tests.test_tooling_pc.CDPNavigation.test_probe_page_has_custom_readiness) ... ok\ntest_run_id_and_stale_result_clearing (tests.test_tooling_pc.ProbePage.test_run_id_and_stale_result_clearing) ... ok\ntest_rates_and_negative_delta (tests.test_tooling_pc.SamplerMath.test_rates_and_negative_delta) ... ok\n\n----------------------------------------------------------------------\nRan 5 tests in 0.689s\n\nOK\n",
   "device": {
     "status": "NOT RUN",
     "reason": "phone unplugged"
   },
   "sha256": {
-    "tests/idle_park_cpu.py": "ec40c1189bfd03eaa4cb93b26688e77cf223db3e64a4a647e5ae24ccde625246",
-    "scripts/webview_cdp.py": "4629afbaf455275e112510dd62660a7ac34d04d5bd0b1d88da8b55c67d6e7590",
+    "tests/idle_park_cpu.py": "2f83ec8287c3094feb99421076fd8329057eaa6520ac92106c60d9dd9d50269b",
+    "tests/test_tooling_pc.py": "a9af6f421a4ae725108b75885c7c8a98d268afd1d5d12e31d395c9182f938f58",
+    "scripts/webview_cdp.py": "d2ca6a121fd51bd09eff09f2f9f2becf63b0297d6a41317b83eb22a42286196b",
     "server/app.py": "8282f56098b0821ea7125f7db936176966bd7200f7d6bd07e9da0b1a3b397e2d",
     "sitecrew/api_v2.py": "ccec4f5671649aeeb7ada02ed1986472acb97694ef83aa775a33a8b954f8931f"
   }
