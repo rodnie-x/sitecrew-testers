@@ -14,8 +14,12 @@ sys.path.insert(0, REPO)
 os.environ["SITECREW_STORE"] = "1"
 os.environ["SITECREW_DEBUG"] = "1"
 
-from scripts.webview_cdp import CDP  # noqa: E402
 from tests.idle_park_cpu import pct, rates_from  # noqa: E402
+
+if importlib.util.find_spec("websocket") is not None:
+    from scripts.webview_cdp import CDP  # noqa: E402
+else:
+    CDP = None
 
 
 class FakeWS:
@@ -67,6 +71,7 @@ class ProbePage(unittest.TestCase):
             "/api/v2/debug/probe-results").get_json(), {"empty": True})
 
 
+@unittest.skipUnless(CDP is not None, "websocket-client is not installed")
 class CDPNavigation(unittest.TestCase):
     def test_event_buffer(self):
         cdp = CDP()

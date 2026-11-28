@@ -64,7 +64,7 @@ class SQLiteLint(unittest.TestCase):
         sql_markers = ("SELECT", "INSERT", "CREATE", "PRAGMA", "BEGIN", "UPDATE",
                        "DELETE", "COMMIT", "ROLLBACK")
         offenders = []
-        for fn in ("db.py", "events.py"):
+        for fn in ("db.py", "events.py", "search.py"):
             path = os.path.join(store_dir, fn)
             for const in string_constants_of(path):
                 if not any(m in const.upper() for m in sql_markers):
@@ -78,7 +78,7 @@ class SQLiteLint(unittest.TestCase):
     def test_json_gated_on_runtime_json1(self):
         """If the store's SQL uses json_*, JSON1 must work in the linked runtime."""
         uses_json = False
-        for fn in ("db.py", "events.py"):
+        for fn in ("db.py", "events.py", "search.py"):
             path = os.path.join(store_dir_path(fn), )
             for const in string_constants_of(path):
                 if "json_" in const.lower():

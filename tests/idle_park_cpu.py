@@ -164,9 +164,11 @@ def window(name, seconds, clients, head, interval=5.0):
         invalid = "proc-stat unreachable at a window boundary"
     elif sampling_errors:
         invalid = "proc-stat missed %d in-window samples" % sampling_errors
-    elif any(p[2] != ticks0[2] for p in points):
+    elif (ticks1[2] != ticks0[2]
+          or any(p[2] != ticks0[2] for p in points)):
         invalid = "app pid changed mid-window (restart/OOM)"
-    elif any(b[1] < a[1] for a, b in zip(points, points[1:])):
+    elif (ticks1[1] < ticks0[1]
+          or any(b[1] < a[1] for a, b in zip(points, points[1:]))):
         invalid = "tick counter went backwards (pid reuse?)"
 
     cpu_pct = None

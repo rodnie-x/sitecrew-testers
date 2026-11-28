@@ -1,0 +1,23 @@
+{
+  "created_utc": "2026-11-28T02:05:21.481835+00:00",
+  "scope": "PC synthetic importer smoke only; not the three real corpora and not device evidence",
+  "command": "python -X utf8 tests/test_importer_smoke.py",
+  "result": "PASS",
+  "chats": "12/12",
+  "messages": "41/41",
+  "queued": "12/12",
+  "checks": [
+    "idempotent rerun",
+    "partial-import recovery",
+    "atomic legacy chat-id mapping with chat state and event"
+  ],
+  "stdout": "importer smoke ok: {'chats_in': 12, 'chats_out': 12, 'messages_in': 41, 'messages_out': 41, 'queue_in': 12, 'queue_out': 12}\n",
+  "device": {
+    "status": "NOT RUN",
+    "reason": "phone unplugged"
+  },
+  "sha256": {
+    "sitecrew/store/importer.py": "2977eddc1ae9d515f7d058b309edaf7745bde8f461c7f7d592aef6470e9050f9",
+    "tests/test_importer_smoke.py": "1fbd8009ac64b5625c0e110b083fa132411cd35d2a9c6afbcfd9216fafb06e1e"
+  }
+}

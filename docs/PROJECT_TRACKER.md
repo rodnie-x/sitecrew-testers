@@ -1,8 +1,10 @@
 # PROJECT TRACKER — SiteCrew AI "Real Office" build
 Updated: Nov 28, 2026. Phone is unplugged: every phone-only item is NOT RUN.
-Chrome-2 is connected and has delivered two substantive FIX FIRST reviews;
-Chrome-1 and Chrome-3 are currently disconnected. Chrome-3's Phase 2 order was
-received before disconnect. In-app Claude remains logged out (owner action).
+All three Chrome bosses are connected. Chrome-2 ruled the c627d50 tooling
+SAFE TO RUN for PC/tooling scope (device still NOT RUN); two final robustness
+nits were applied locally. Chrome-1 delivered the revised phone-local CPU diag
+spec (docs/DEVICE_CPU_DIAG_SPEC.md). Chrome-3 delivered the Phase 2/S0 draft;
+owner decisions remain OPEN. In-app Claude remains logged out (owner action).
 
 ## ✅ ACCOMPLISHED (evidence-backed, boss-ruled)
 
@@ -56,10 +58,9 @@ received before disconnect. In-app Claude remains logged out (owner action).
   sampler now keeps full 4-tuples, saves decay samples incrementally, samples
   p95 every 5 s, checks pid/errors/negative deltas, gates every parker, rereads
   head before parking, and restores USB stay-awake in `finally`.
-- Code-review boss: third review found stale load events, probe readiness,
-  runtime hash verification, sub-second p95 artifacts, attach retry and forward
-  error handling. Those are fixed locally; the committed `test_tooling_pc.py`
-  regression suite passes 5/5. Narrow verification review is next.
+- Code-review boss: **SAFE TO RUN (PC/tooling scope) at c627d50**. Its final
+  ticks1 guard and optional-websocket portability nits are applied locally;
+  physical-device checks remain NOT RUN. Next review: P1.1 importer + P1.4 search.
 - Phase-2 planning boss: execution order and risks received (including token
   contrast failures and the Stop-abort feasibility spike). Archive the full
   order when Chrome-3 reconnects, then review S0 before implementation.
@@ -88,9 +89,13 @@ received before disconnect. In-app Claude remains logged out (owner action).
 4. **G1 pack** (design received; execute after the device half): release APK
    from the final tree, leg rerun on it (covers the am force-stop path),
    release checks (probe + proc-stat 404, flag off), evidence format.
-5. **Phase 1 leftovers**: P1.4 search suite (SearchIndex both backends —
-   device has NO FTS5: brain_terms fallback is the device backend), P1.1
-   import runs on the three corpora, P1.5 mirror/flip.
+5. **Phase 1 leftovers**: P1.4 PC increment implemented (SearchIndex FTS5 +
+   forced brain_terms; 8/8 search tests and 37/37 related tests PASS;
+   `reports/p14_search_pc.json`; boss review still required). P1.1 legacy chat-id
+   mapping now commits atomically with import state+event; synthetic smoke PASS
+   12/12 chats, 41/41 messages, 12/12 queued including rerun/partial recovery
+   (`reports/p11_importer_smoke.json`). The three real corpora and device import
+   remain NOT RUN. P1.5 mirror/flip remains TODO. Combined PC suite: 50/50 PASS.
 6. **Phase 2** (order being drafted by the planning boss): engine core,
    ModelGateway (NVIDIA-only allowlist), tool contract + tiers + approval
    gates, Calm iOS shell — then the Phase 2 gate run.
