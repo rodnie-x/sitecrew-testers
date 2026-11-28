@@ -1,0 +1,22 @@
+{
+  "created_utc": "2026-11-28T14:27:47.116216+00:00",
+  "scope": "PC-only isolated P1.5 mirror adapter; NOT wired into production; NOT a P1.5 gate PASS",
+  "result": "PASS",
+  "focused_tests": {
+    "run": 20,
+    "passed": 20
+  },
+  "related_tests": {
+    "run": 57,
+    "passed": 57
+  },
+  "stderr": "test_internal_and_public_fields_survive_every_mutation (tests.test_legacy_mirror.TestCanonicalParity.test_internal_and_public_fields_survive_every_mutation) ... ok\ntest_clear_watermark_keeps_rows_and_queue (tests.test_legacy_mirror.TestClear.test_clear_watermark_keeps_rows_and_queue) ... ok\ntest_compression_hides_originals_and_creates_summary (tests.test_legacy_mirror.TestCompression.test_compression_hides_originals_and_creates_summary) ... ok\ntest_injected_mirror_failure_is_contained_then_reconciled (tests.test_legacy_mirror.TestCrashReconcile.test_injected_mirror_failure_is_contained_then_reconciled) ... legacy mirror failed (kind=exchange): injected mirror failure\nok\ntest_kill_after_commit_reconciles_to_noop (tests.test_legacy_mirror.TestCrashReconcile.test_kill_after_commit_reconciles_to_noop) ... ok\ntest_kill_inside_batch_rolls_back_and_boot_reconciles (tests.test_legacy_mirror.TestCrashReconcile.test_kill_inside_batch_rolls_back_and_boot_reconciles) ... ok\ntest_full_mutation_scenario_rebuild_equals_projection (tests.test_legacy_mirror.TestEventsOnlyRebuild.test_full_mutation_scenario_rebuild_equals_projection) ... ok\ntest_every_created_row_has_message_created_both_directions (tests.test_legacy_mirror.TestInvariants.test_every_created_row_has_message_created_both_directions) ... ok\ntest_mirror_invariants_catch_dangling_referent (tests.test_legacy_mirror.TestInvariants.test_mirror_invariants_catch_dangling_referent) ... ok\ntest_no_physical_deletion_sql_in_adapter (tests.test_legacy_mirror.TestInvariants.test_no_physical_deletion_sql_in_adapter) ... ok\ntest_bad_snapshot_fails_mirror_only (tests.test_legacy_mirror.TestMirrorErrorContainment.test_bad_snapshot_fails_mirror_only) ... legacy mirror failed (kind=exchange): legacy message must be a dict, got 'str'\nok\ntest_exchange_emits_minimal_created_events (tests.test_legacy_mirror.TestNormalExchange.test_exchange_emits_minimal_created_events) ... ok\ntest_first_job_born_with_tools_used_creates_not_annotates (tests.test_legacy_mirror.TestNormalExchange.test_first_job_born_with_tools_used_creates_not_annotates) ... ok\ntest_enqueue_then_fifo_flush (tests.test_legacy_mirror.TestQueueDequeueFIFO.test_enqueue_then_fifo_flush) ... ok\ntest_identical_text_repeats_are_separate_rows (tests.test_legacy_mirror.TestRepeatedSnapshot.test_identical_text_repeats_are_separate_rows) ... ok\ntest_same_snapshot_is_idempotent (tests.test_legacy_mirror.TestRepeatedSnapshot.test_same_snapshot_is_idempotent) ... ok\ntest_restore_replaces_transcript_and_restores_undo (tests.test_legacy_mirror.TestRestore.test_restore_replaces_transcript_and_restores_undo) ... ok\ntest_live_chat_id_persisted_in_meta_and_reused (tests.test_legacy_mirror.TestStableLiveChatId.test_live_chat_id_persisted_in_meta_and_reused) ... ok\ntest_annotation_patches_last_row_never_the_created_event (tests.test_legacy_mirror.TestToolsUsedAnnotation.test_annotation_patches_last_row_never_the_created_event) ... ok\ntest_undo_tombstones_tail_and_keeps_history (tests.test_legacy_mirror.TestUndo.test_undo_tombstones_tail_and_keeps_history) ... ok\n\n----------------------------------------------------------------------\nRan 20 tests in 1.680s\n\nOK\n",
+  "device": {
+    "status": "NOT RUN",
+    "reason": "no diagnostic deploy or CPU run"
+  },
+  "sha256": {
+    "sitecrew/store/legacy.py": "a3e7a9f5701b53da9f8b35b8f3b8e865b15019162fd49ec6133f1d9f126654b9",
+    "tests/test_legacy_mirror.py": "e578107e7ead6e6ca566ed493067c2ea9499ea789f4f43e1dd9f8e052645ad0d"
+  }
+}
