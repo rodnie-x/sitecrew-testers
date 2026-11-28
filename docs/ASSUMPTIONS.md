@@ -8,7 +8,7 @@ unmodified tree. This file is the contract the spec's Phase 0 exit gate (G0) req
 | # | Assumption | Status | Evidence |
 | --- | --- | --- | --- |
 | A1 | APK is built by CI with p4a and deployed by `adb push` + `run-as cp` hot-deploy | **CONFIRMED** | `.github/workflows/build-apk.yml` — p4a `--bootstrap=webview --package=com.sitecrew.ai --port=8080 --private=app`; hot-deploy procedure recorded in `RESUME.md` |
-| A2 | Supported Android versions: floor API 24, CI target API 33, physical device = TECNO LH7n on Android 14 (API 34) | **CONFIRMED** | p4a args `--minsdk=24 --ndk-api=24 --android-api=33`; device serial `103953738Q003608` |
+| A2 | Supported Android versions: floor API 24, CI target API 33, physical device = TECNO LH7n on Android 14 (API 34) | **CONFIRMED** | p4a args `--minsdk=24 --ndk-api=24 --android-api=33`; device serial `sha256:41f18c1143227955` |
 | A3 | Flask runs in the **same process** as the UI (webview bootstrap, port 8080); killing the app kills the agent | **CONFIRMED** | `apk_main.py:19,40-58` — `app.run(host="127.0.0.1", port=8080, threaded=True)` inside the p4a Python process; WebView polls localhost:8080 |
 
 ## B. Spec §1.3 [ASSUME] rows

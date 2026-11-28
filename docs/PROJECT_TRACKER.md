@@ -117,7 +117,7 @@ owner decisions remain OPEN. In-app Claude remains logged out (owner action).
 
 ## 🔑 KEY FACTS
 - Phone: TECNO LH7n, Android 14 (SDK 34), SQLite 3.35.5 (no FTS5), serial
-  hashed in reports. adb serial 103953738Q003608.
+  hashed in reports. adb serial sha256:41f18c1143227955.
 - Frozen hashes live in tests/evidence/p13_sha256s.txt (refreshed to the
   working tree at every deploy; device verified against it).
 - Evidence repo: github.com/rodnie-x/sitecrew-testers (PUBLIC — no raw device
