@@ -14,7 +14,15 @@ P1.5 PASS. Physical device and device tour: **NOT RUN** (phone unplugged).
 - Unify legacy chat-ID remapping first: persisted, deterministic and bijective.
 - Capture raw legacy GET goldens after that fix and before route/shim changes.
   Declare and hash timestamp/generated-ID normalization before capture; never tune it
-  afterward to obtain parity.
+  afterward to obtain parity. The first published manifest is independently pinned:
+  SHA-256 `252a2ca34ac98f6b5a9657b3c0598ea0ece9f7dcaf8878a404180503d3eab856`.
+  Regenerating the manifest/bodies requires an explicit review of that pin.
+  Ordering evidence: the remapper unification, normalization declaration and first
+  15-golden capture were published together in public commit `95e96ed`; this is
+  same-commit evidence, not three separately reviewed commits. Later hardening:
+  raw-body binary marking `765c19b`, narrowed search/import fixes `46b2a7f`,
+  serial redaction `5e51647`, public-subset skip guards `a62463b`, deploy helper
+  fixes `ddc23bd`, and independent public golden byte/manifest pin `8b5ed5e`.
 - Imported messages receive deterministic, idempotent `message.created` events with
   `origin=import`; existing events are never edited.
 
