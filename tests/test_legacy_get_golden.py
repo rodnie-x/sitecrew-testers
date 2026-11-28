@@ -6,6 +6,7 @@ Run with the legacy store flag OFF:
 The normalization hashes below are independent pins, not values recomputed only
 by the capture tool. Editing a rule to hide a later regression fails this test.
 """
+import hashlib
 import importlib.util
 import json
 import os
@@ -20,6 +21,45 @@ if importlib.util.find_spec("crew") is not None:
     from scripts import capture_legacy_get as golden  # noqa: E402
 else:
     golden = None
+
+FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "legacy_get")
+MANIFEST_PATH = os.path.join(FIXTURE_DIR, "manifest.json")
+BODY_DIR = os.path.join(FIXTURE_DIR, "bodies")
+# Independent pin for the entire published baseline manifest. If bodies or the
+# manifest are regenerated together, this constant must be reviewed and updated
+# explicitly; it is also recorded in docs/P15_DESIGN_RULING.md.
+MANIFEST_SHA256 = "252a2ca34ac98f6b5a9657b3c0598ea0ece9f7dcaf8878a404180503d3eab856"
+
+
+class GoldenBytesPublic(unittest.TestCase):
+    """Crew-free public proof of the exact baseline bytes and manifest pin."""
+
+    def test_manifest_is_pinned_and_bodies_match(self):
+        with open(MANIFEST_PATH, "rb") as f:
+            manifest_bytes = f.read()
+        self.assertEqual(hashlib.sha256(manifest_bytes).hexdigest(), MANIFEST_SHA256)
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        responses = manifest["responses"]
+        self.assertEqual(len(responses), 15)
+        routes = {r["route"] for r in responses}
+        self.assertEqual(len(routes), 8)
+        self.assertIn("/api/state", routes)
+        self.assertIn("/", routes)
+        self.assertEqual(sum(r["route"] == "/api/state" for r in responses), 8)
+        self.assertEqual(sum(r["route"] != "/api/state" for r in responses), 7)
+        seen = set()
+        for record in responses:
+            body_path = os.path.join(FIXTURE_DIR, record["body_file"])
+            with open(body_path, "rb") as f:
+                body = f.read()
+            self.assertEqual(len(body), record["body_bytes"], record["id"])
+            self.assertEqual(hashlib.sha256(body).hexdigest(),
+                             record["body_sha256"], record["id"])
+            seen.add(record["id"])
+        with os.scandir(BODY_DIR) as entries:
+            actual_files = {entry.name[:-4] for entry in entries
+                            if entry.is_file() and entry.name.endswith(".bin")}
+        self.assertEqual(actual_files, seen)
 
 
 @unittest.skipUnless(golden is not None, "full product modules are not in the public subset")
