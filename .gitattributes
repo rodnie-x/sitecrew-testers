@@ -1,0 +1,2 @@
+# Raw golden response bodies must remain byte-identical across checkouts.
+tests/fixtures/legacy_get/bodies/*.bin binary
