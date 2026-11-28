@@ -5,14 +5,20 @@ the FAKE NVIDIA server — no real internet, no real key. The device half lives 
 tests/test_characterization_device.py with a connectivity preflight (offline →
 NOT RUN, never FAIL).
 """
+import importlib.util
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tests.fakes.fake_nvidia import FakeNvidia   # noqa: E402
+CREW_PRESENT = importlib.util.find_spec("crew") is not None
+if CREW_PRESENT:
+    from tests.fakes.fake_nvidia import FakeNvidia   # noqa: E402
+else:
+    FakeNvidia = None
 
 
+@unittest.skipUnless(CREW_PRESENT, "full product modules are not in the public subset")
 class ChatAgainstFakeNvidia(unittest.TestCase):
     def setUp(self):
         """Point NvidiaClient at the fake server for the duration of each test.

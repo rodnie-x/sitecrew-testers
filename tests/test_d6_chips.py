@@ -5,17 +5,23 @@ A failed turn (crew error) must NEVER carry tools_used — the chip promise is
 behavior that Phase 2/3 will implement (server/app.py currently attaches counts
 in the finally block regardless of outcome — D6 fix lands with the engine).
 """
+import importlib.util
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tests.helpers import reset_state, make_crew  # noqa: E402
-import server.app as module  # noqa: E402
+CREW_PRESENT = importlib.util.find_spec("crew") is not None
+if CREW_PRESENT:
+    from tests.helpers import reset_state, make_crew  # noqa: E402
+    import server.app as module  # noqa: E402
+else:
+    reset_state = make_crew = None
+    module = None
+client = module.app.test_client() if module is not None else None
 
-client = module.app.test_client()
 
-
+@unittest.skipUnless(CREW_PRESENT, "full product modules are not in the public subset")
 class D6ChipHonesty(unittest.TestCase):
     def setUp(self):
         reset_state(monkey_net=True, fake_crew=make_crew())

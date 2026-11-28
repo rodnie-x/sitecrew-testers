@@ -15,6 +15,7 @@ Changes vs v1:
   integrity ok.
 Evidence: tests/evidence/p12_kill_report.json (v2 fields).
 """
+import faulthandler
 import json
 import os
 import random
@@ -28,7 +29,11 @@ import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import faulthandler   # noqa: E402 — hang dumps (boss: name the capture method)
 from sitecrew.store import db as sdb   # noqa: E402
+
+# the harness itself: dump all stacks if the whole run stalls >120 s per phase
+faulthandler.enable()
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WRITER = os.path.join(REPO, "tests", "kill_writer.py")
@@ -76,10 +81,11 @@ class KillHarnessV2(unittest.TestCase):
     def test_p12_kill_harness_v2(self):
         # boss item 8: free-space preflight — fail fast instead of disk-full thrash
         import shutil as _sh
-        free = _sh.disk_usage("D:/" if os.path.exists("D:/") else "C:/").free
-        self.assertGreater(free, 2 * 1024 ** 3, "less than 2 GB free - aborting")
         big_drive = "D:/" if os.path.exists("D:/") else None
-        tmp = tempfile.mkdtemp(prefix="sc_kill2_", dir=big_drive)
+        tmp_parent = big_drive or tempfile.gettempdir()
+        free = _sh.disk_usage(tmp_parent).free
+        self.assertGreater(free, 2 * 1024 ** 3, "less than 2 GB free - aborting")
+        tmp = tempfile.mkdtemp(prefix="sc_kill2_", dir=tmp_parent)
         db_path = os.path.join(tmp, "sitecrew.db")
         seed = random.randrange(2 ** 31)
         rng = random.Random(seed)
@@ -114,7 +120,7 @@ class KillHarnessV2(unittest.TestCase):
                 last_acked_by_stream[s] = max(last_acked_by_stream[s], seq)
             return len(reader.acks)
 
-        # -- 200 random kills: 0–400 ms after READY, external Popen.kill() ------
+        # -- 200 random kills: 0–400 ms after READY, external taskkill /F --------
         unacked_begin_kills = 0
         random_probes_fail = []                 # boss item 3: both-present probe
         for _ in range(RANDOM_KILLS):
@@ -124,7 +130,8 @@ class KillHarnessV2(unittest.TestCase):
             while not reader.ready and time.time() < deadline and proc.poll() is None:
                 time.sleep(0.001)
             time.sleep(rng.uniform(0.0, 0.4))       # seeded, after READY
-            proc.kill()
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=15)
             proc.wait(timeout=30)
             reader.join(timeout=10)                 # drain the pipe to EOF first
             committed = collect(reader)
@@ -164,11 +171,21 @@ class KillHarnessV2(unittest.TestCase):
             for i in range(INJECTED_PER_MODE):
                 k = ks[mode_i * INJECTED_PER_MODE + i]
                 proc, reader = spawn(mode, k)
+                # per-cycle hang watchdog: taskkill from a SEPARATE process
+                # (Popen.kill() itself blocks when the child is in kernel I/O)
+                watchdog = threading.Timer(
+                    60, lambda p=proc: subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(p.pid)],
+                        capture_output=True, timeout=15))
+                watchdog.daemon = True
+                watchdog.start()
                 try:
                     proc.wait(timeout=90)
                 except subprocess.TimeoutExpired:
-                    proc.kill()
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                                   capture_output=True, timeout=15)
                     proc.wait(timeout=30)
+                watchdog.cancel()
                 reader.join(timeout=10)             # drain fully before accounting
                 collect(reader)
                 kills[mode] += 1

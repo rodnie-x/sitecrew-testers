@@ -5,6 +5,7 @@ exercised through its real Flask test client; only the network seam and the crew
 are faked (the same technique already verified live on the phone).
 """
 import base64
+import importlib.util
 import io
 import json
 import os
@@ -17,13 +18,18 @@ import unittest
 import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tests.helpers import reset_state, make_crew, FakeCrew  # noqa: E402
-import server.app as module  # noqa: E402
+CREW_PRESENT = importlib.util.find_spec("crew") is not None
+if CREW_PRESENT:
+    from tests.helpers import reset_state, make_crew, FakeCrew  # noqa: E402
+    import server.app as module  # noqa: E402
+else:                                           # public review subset
+    reset_state = make_crew = FakeCrew = None
+    module = None
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC = os.path.join(ROOT, "server", "static")
 
-client = module.app.test_client()
+client = module.app.test_client() if module is not None else None
 
 
 def state():
@@ -35,6 +41,7 @@ def read(path):
         return f.read()
 
 
+@unittest.skipUnless(CREW_PRESENT, "full product modules are not in the public subset")
 class BaseCase(unittest.TestCase):
     def setUp(self):
         reset_state(monkey_net=False)   # deterministic offline default
@@ -451,6 +458,7 @@ class IdentityAndHonesty(BaseCase):
 
 # ---------------- 10. Fake NVIDIA API shape (foundation for Phase 2 wrapper) ----------
 
+@unittest.skipUnless(CREW_PRESENT, "full product modules are not in the public subset")
 class FakeNvidiaShape(unittest.TestCase):
     def test_fake_serves_openai_compatible_models_and_chat(self):
         from tests.fakes.fake_nvidia import FakeNvidia
