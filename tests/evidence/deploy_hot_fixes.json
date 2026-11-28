@@ -1,0 +1,31 @@
+{
+  "created_utc": "2026-11-28T13:24:16.052036+00:00",
+  "scope": "PC-only mocked/fail-closed deploy-helper tests; no device action",
+  "result": "PASS",
+  "tests": {
+    "run": 12,
+    "passed": 12
+  },
+  "fixes": [
+    "fail-closed dry-run and path resolution",
+    "trusted preflight backups with hash verification",
+    "preflight all files before overwrite",
+    "atomic staged copy then move",
+    "realpath containment",
+    "serial redaction/pinning",
+    "pinned forward",
+    "PID-change restart verification",
+    "validated remote hashes",
+    "safe shell quoting",
+    "temp collision suffix",
+    "report in finally"
+  ],
+  "device": {
+    "status": "NOT RUN",
+    "reason": "phone no longer visible to adb"
+  },
+  "sha256": {
+    "scripts/deploy_hot.py": "2500f9f3688f09f4884f5b7a729a74e92aca8f71913df44aa131b191b00b76ca",
+    "tests/test_deploy_hot.py": "2651e28d3383e2458ac1f5a42c352b737a62edeb67d63dca96c8f2279c4a9828"
+  }
+}
