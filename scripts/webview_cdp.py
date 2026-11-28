@@ -14,10 +14,12 @@ waits + errorText checks on navigate/reload, send() timeout actually applied
 transcript-scope selection (no fail-open fallbacks), forward return code
 checked with stderr surfaced.
 """
+import collections
 import json
 import os
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 import websocket                                    # pip install websocket-client
@@ -61,18 +63,23 @@ class CDP:
         self.ws = None
         self._id = 0
         self.target_url = None
+        self._events = collections.deque(maxlen=256)
 
-    def attach_to_page(self, url_prefix="http://127.0.0.1:8080"):
+    def attach_to_page(self, url_prefix=None):
         with urllib.request.urlopen(
                 "http://127.0.0.1:%d/json" % self.port, timeout=10) as r:
             targets = json.loads(r.read().decode("utf-8"))
-        pages = [t for t in targets
-                 if t.get("type") == "page"
-                 and (t.get("url") or "").startswith(url_prefix)]
+        pages = []
+        for target in targets:
+            url = target.get("url") or ""
+            parsed = urllib.parse.urlparse(url)
+            if (target.get("type") == "page" and parsed.port == 8080
+                    and parsed.hostname in ("127.0.0.1", "localhost")):
+                pages.append(target)
         if not pages:
-            raise RuntimeError("no page target for %s; targets: %s"
-                               % (url_prefix,
-                                  [t.get("url") for t in targets][:5]))
+            raise RuntimeError("no app page target on 127.0.0.1/localhost:8080; "
+                               "targets: %s"
+                               % [t.get("url") for t in targets][:5])
         page = pages[0]
         self.target_url = page.get("url")
         self.ws = websocket.create_connection(
@@ -88,9 +95,14 @@ class CDP:
         self.ws.send(json.dumps({"id": mid, "method": method,
                                  "params": params or {}}))
         while True:
-            self.ws.settimeout(max(0.1, deadline - time.time()))  # review #12
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise TimeoutError("%s timed out" % method)
+            self.ws.settimeout(remaining)              # review #12
             raw = self.ws.recv()
             msg = json.loads(raw)
+            if msg.get("method"):
+                self._events.append(msg)               # preserve load events
             if msg.get("id") == mid:
                 if "error" in msg:
                     raise RuntimeError("%s failed: %s" % (method, msg["error"]))
@@ -110,19 +122,31 @@ class CDP:
         return r.get("value")
 
     def _wait_load(self, timeout=30):
-        """Read frames until Page.loadEventFired (review fix #4)."""
+        """Read frames until Page.loadEventFired, including buffered events."""
         deadline = time.time() + timeout
-        while time.time() < deadline:
-            self.ws.settimeout(max(0.1, deadline - time.time()))
-            raw = self.ws.recv()
-            msg = json.loads(raw)
+        while True:
+            while self._events:
+                msg = self._events.popleft()
+                if msg.get("method") == "Page.loadEventFired":
+                    return True
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            self.ws.settimeout(remaining)
+            msg = json.loads(self.ws.recv())
             if msg.get("method") == "Page.loadEventFired":
                 return True
+            if msg.get("method"):
+                self._events.append(msg)
         raise TimeoutError("Page.loadEventFired not seen in %ss" % timeout)
 
-    def _settle(self, url_prefix="http://127.0.0.1:8080", timeout=30):
+    def _settle(self, url_prefix=None, timeout=30):
         """After navigate/reload: readyState complete + href matches + the
         document is really the app's (review fix #4: no stale-DOM hashing)."""
+        if url_prefix is None:
+            target = urllib.parse.urlparse(self.target_url or "")
+            url_prefix = urllib.parse.urlunparse(
+                (target.scheme, target.netloc, "/", "", "", ""))
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
@@ -130,7 +154,7 @@ class CDP:
                     "JSON.stringify({ rs: document.readyState,"
                     " href: location.href,"
                     " hasApp: !!document.querySelector('textarea,"
-                    " div[contenteditable], #transcript, main, body') })",
+                    " div[contenteditable], #transcript, main') })",
                     timeout=5)
                 d = json.loads(st) if isinstance(st, str) else st
                 if (d.get("rs") == "complete"
@@ -149,7 +173,12 @@ class CDP:
             raise RuntimeError("navigate failed: %s" % res["errorText"])
         if settle:
             self._wait_load()
-            self._settle(url_prefix=url.rsplit("/", 1)[0] + "/")
+            parsed = urllib.parse.urlparse(url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError("settle=True requires an absolute HTTP(S) URL")
+            prefix = urllib.parse.urlunparse(
+                (parsed.scheme, parsed.netloc, "/", "", "", ""))
+            self._settle(url_prefix=prefix)
         return res
 
     def reload(self, settle=True):

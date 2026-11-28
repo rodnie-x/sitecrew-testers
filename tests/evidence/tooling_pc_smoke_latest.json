@@ -1,0 +1,19 @@
+{
+  "created_utc": "2026-11-28T00:23:10.669985+00:00",
+  "scope": "PC-only mocked/tooling smoke; no physical-device claim",
+  "checks": {
+    "sampler_math_and_negative_delta": "PASS",
+    "probe_run_id_and_stale_result_clearing": "PASS",
+    "cdp_buffer_about_blank_localhost": "PASS"
+  },
+  "device": {
+    "status": "NOT RUN",
+    "reason": "phone unplugged"
+  },
+  "sha256": {
+    "tests/idle_park_cpu.py": "ec40c1189bfd03eaa4cb93b26688e77cf223db3e64a4a647e5ae24ccde625246",
+    "scripts/webview_cdp.py": "4629afbaf455275e112510dd62660a7ac34d04d5bd0b1d88da8b55c67d6e7590",
+    "server/app.py": "8282f56098b0821ea7125f7db936176966bd7200f7d6bd07e9da0b1a3b397e2d",
+    "sitecrew/api_v2.py": "ccec4f5671649aeeb7ada02ed1986472acb97694ef83aa775a33a8b954f8931f"
+  }
+}

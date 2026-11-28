@@ -28,7 +28,6 @@ import sys
 import threading
 import time
 import urllib.request
-import uuid
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
@@ -100,14 +99,14 @@ def parker(cid, head, log, stats, stop):
                   if durations else None})
 
 
-def rates_from(points, user_hz):
-    """Per-interval CPU% from (mono, ticks) points; discards negatives."""
+def rates_from(points):
+    """Per-interval CPU% from (mono, ticks, pid, user_hz) samples."""
     rates = []
-    for (ta, ca), (tb, cb) in zip(points, points[1:]):
-        dt = tb - ta
-        dticks = cb - ca
+    for a, b in zip(points, points[1:]):
+        dt = b[0] - a[0]
+        dticks = b[1] - a[1]
         if dt > 0 and dticks >= 0:          # negative = pid reuse: discard
-            rates.append(round((dticks / user_hz) / dt * 100.0, 3))
+            rates.append(round((dticks / b[3]) / dt * 100.0, 3))
     return rates
 
 
@@ -130,6 +129,8 @@ def window(name, seconds, clients, head, interval=5.0):
     state_start = device_state()           # review #6: state BEFORE ticks
     ticks0 = proc_sample()
     wall0 = time.monotonic()
+    points = [ticks0] if ticks0 is not None else []
+    sampling_errors = 0
     for i in range(clients):
         t = threading.Thread(target=parker,
                              args=("park-%s-%d" % (name, i), head, log,
@@ -137,8 +138,20 @@ def window(name, seconds, clients, head, interval=5.0):
                              daemon=True)
         t.start()
         threads.append(t)
-    time.sleep(seconds)
+    deadline = wall0 + seconds
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(interval, remaining))
+        sample = proc_sample()
+        if sample is None:
+            sampling_errors += 1
+        else:
+            points.append(sample)
     ticks1 = proc_sample()
+    if ticks1 is not None:
+        points.append(ticks1)
     state_end = device_state()
     stop.set()
     for t in threads:
@@ -147,27 +160,31 @@ def window(name, seconds, clients, head, interval=5.0):
     invalid = None
     if ticks0 is None or ticks1 is None:
         invalid = "proc-stat unreachable at a window boundary"
-    elif ticks1[2] != ticks0[2]:
+    elif sampling_errors:
+        invalid = "proc-stat missed %d in-window samples" % sampling_errors
+    elif any(p[2] != ticks0[2] for p in points):
         invalid = "app pid changed mid-window (restart/OOM)"
-    elif ticks1[1] < ticks0[1]:
+    elif any(b[1] < a[1] for a, b in zip(points, points[1:])):
         invalid = "tick counter went backwards (pid reuse?)"
 
     cpu_pct = None
+    interval_rates = rates_from(points)
     if invalid is None:
         dt = ticks1[0] - ticks0[0]
         if dt > 0:
             cpu_pct = round((ticks1[1] - ticks0[1]) / ticks1[3] / dt * 100.0, 3)
 
-    parker_valid = True
-    for s in stats:
-        if s["nonempty"] != 0 or s["mean_duration_s"] is None \
-                or s["mean_duration_s"] < 20.0:
-            parker_valid = False
-    if clients > 0 and not stats:
-        parker_valid = False
+    parker_valid = (len(stats) == clients and all(
+        s["nonempty"] == 0 and s["errors"] <= 2
+        and 20.0 <= (s["mean_duration_s"] or 0) <= 27.0
+        for s in stats))
 
     return {"window": name, "clients": clients, "wall_s": round(seconds, 1),
             "app_cpu_pct_of_one_core": cpu_pct,
+            "app_cpu_p95_pct_of_one_core": pct(interval_rates, 0.95),
+            "interval_rates_pct": interval_rates,
+            "sample_count": len(points),
+            "sampling_errors": sampling_errors,
             "state_start": state_start, "state_end": state_end,
             "states_match": (state_start.get("wakefulness") ==
                              state_end.get("wakefulness")
@@ -183,14 +200,7 @@ def window(name, seconds, clients, head, interval=5.0):
             "invalid": invalid}
 
 
-def main():
-    serial = adb_helpers.serial()
-    if not serial:
-        print(json.dumps({"error": "no adb device"}))
-        return 1
-    os.environ["ANDROID_SERIAL"] = serial
-    adb_helpers.forward(18110)
-
+def measure_on_device(serial):
     # the head and the deployed slice length, from the device's own report
     with urllib.request.urlopen(
             BASE + "/api/v2/debug/store-state?db=main", timeout=10) as r:
@@ -201,9 +211,6 @@ def main():
                                    "(a head fetch failure invalidates the "
                                    "parkers)"}))
         return 1
-
-    # keep the screen on for the whole run (review #6)
-    adb_helpers.adb("shell", "svc", "power", "stayon", "usb", timeout=15)
 
     print("decay curve (12 min from a FRESH restart, no clients)...",
           flush=True)
@@ -224,18 +231,27 @@ def main():
         print(json.dumps({"error": "server did not come up"}))
         return 1
     points = []
+    decay_stamp = time.strftime("%Y%m%d_%H%M%S")
+    decay_out = os.path.join(REPO, "tests", "evidence",
+                             "idle_park_decay_%s.json" % decay_stamp)
     t_end = time.time() + 720
     while time.time() < t_end:
         s = proc_sample()
         if s:
-            points.append((s[0], s[1]))
+            points.append(s)
+        with open(decay_out, "w", encoding="utf-8") as f:
+            json.dump({"window": "decay_from_restart", "complete": False,
+                       "samples_mono_ticks_pid_user_hz": points}, f, indent=2)
         time.sleep(30)
-    decay_rates = rates_from(points, points[0][3] if points else USER_HZ_FALLBACK)
+    decay_rates = rates_from(points)
     decay = {"window": "decay_from_restart", "minutes": 12,
+             "complete": True, "samples_mono_ticks_pid_user_hz": points,
              "rates_pct": decay_rates,
              "avg_pct": round(sum(decay_rates) / len(decay_rates), 3)
              if decay_rates else None,
              "p95_pct": pct(decay_rates, 0.95)}
+    with open(decay_out, "w", encoding="utf-8") as f:
+        json.dump(decay, f, indent=2)
 
     print("baseline (3 min, no parked poll)...", flush=True)
     base = window("baseline", 180, 0, head)
@@ -244,6 +260,13 @@ def main():
         print(json.dumps({"error": "baseline invalid", "why": base["invalid"]}))
         return 1
 
+    # Re-read after restart + baseline; never park on a stale cursor.
+    with urllib.request.urlopen(
+            BASE + "/api/v2/debug/store-state?db=main", timeout=10) as r:
+        head = json.loads(r.read().decode("utf-8")).get("head", 0)
+    if head <= 0:
+        print(json.dumps({"error": "store head is 0 before park"}))
+        return 1
     print("park (10 min, 2 parked clients, cid, wait=25)...", flush=True)
     park = window("park", 600, 2, head)
     if park.get("invalid"):
@@ -254,13 +277,17 @@ def main():
     b_cpu = base.get("app_cpu_pct_of_one_core") or 0
     p_cpu = park.get("app_cpu_pct_of_one_core") or 0
     delta = round(p_cpu - b_cpu, 3)
-    p95_park = None                        # per-interval p95 needs sampling
+    park_p95 = park.get("app_cpu_p95_pct_of_one_core")
     rule = {
         "avg_delta_pct": delta,
-        "thresholds": "park-minus-baseline avg <= 1%, p95 <= 3% "
+        "park_p95_pct": park_p95,
+        "thresholds": "park-minus-baseline avg <= 1%, park p95 <= 3% "
                       "(pre-registered; boss confirms)",
         "states_match": park.get("states_match"),
         "parker_valid": park.get("parker_valid"),
+        "slices_pass_cpu_rule": bool(
+            delta <= 1.0 and park_p95 is not None and park_p95 <= 3.0
+            and park.get("states_match") and park.get("parker_valid")),
         "design": "1 s slices + cid supersede (PARK_SLICE_S=%s)" % PARK_SLICE_S,
     }
     report = {
@@ -289,6 +316,20 @@ def main():
                       "delta": delta, "parker_valid": park.get("parker_valid"),
                       "parker_stats": park.get("parker_stats")}, indent=2))
     return 0
+
+
+def main():
+    serial = adb_helpers.serial()
+    if not serial:
+        print(json.dumps({"error": "no adb device — device run NOT RUN"}))
+        return 1
+    os.environ["ANDROID_SERIAL"] = serial
+    adb_helpers.forward(18110)
+    adb_helpers.adb("shell", "svc", "power", "stayon", "usb", timeout=15)
+    try:
+        return measure_on_device(serial)
+    finally:
+        adb_helpers.adb("shell", "svc", "power", "stayon", "false", timeout=15)
 
 
 if __name__ == "__main__":

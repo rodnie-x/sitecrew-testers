@@ -933,6 +933,7 @@ def debug_probe_page():
         "    const pick = q => lat.length ?"
         " lat[Math.min(lat.length - 1, Math.floor(q * lat.length))] : null;\n"
         "    const results = { user_agent: navigator.userAgent,\n"
+        "      run_id: new URLSearchParams(location.search).get('run'),\n"
         "      poll_js_sha256_page_fetched: pollHash,\n"
         "      poll_js_etag: pollEtag,\n"
         "      poll_js_loaded: pollLoaded,\n"
